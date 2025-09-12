@@ -1,103 +1,158 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { MapPin, NavigationIcon, Clock, Star } from "lucide-react"
+
+export default function RoutePlanner() {
+  const [fromLocation, setFromLocation] = useState("")
+  const [toLocation, setToLocation] = useState("")
+  const [routes, setRoutes] = useState<any[]>([])
+
+  const handleSearch = () => {
+    // Mock route data for demonstration
+    const mockRoutes = [
+      {
+        id: 1,
+        busNumber: "Route 42",
+        duration: "25 mins",
+        stops: 8,
+        rating: 4.2,
+        nextDeparture: "10:30 AM",
+        fare: "$2.50",
+      },
+      {
+        id: 2,
+        busNumber: "Route 15",
+        duration: "32 mins",
+        stops: 12,
+        rating: 3.8,
+        nextDeparture: "10:45 AM",
+        fare: "$2.50",
+      },
+      {
+        id: 3,
+        busNumber: "Express 7",
+        duration: "18 mins",
+        stops: 4,
+        rating: 4.6,
+        nextDeparture: "11:00 AM",
+        fare: "$3.00",
+      },
+    ]
+    setRoutes(mockRoutes)
+  }
+
+  const handleGetLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          // Mock setting current location
+          setFromLocation("Current Location")
+        },
+        (error) => {
+          console.error("Error getting location:", error)
+        },
+      )
+    }
+  }
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold text-balance mb-2">Plan Your Journey</h1>
+        <p className="text-muted-foreground text-pretty">
+          Find the best bus routes for your destination with real-time information
+        </p>
+      </div>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Route Planning Form */}
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" />
+            Route Planner
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label htmlFor="from" className="text-sm font-medium">
+                From
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id="from"
+                  placeholder="Enter starting location"
+                  value={fromLocation}
+                  onChange={(e) => setFromLocation(e.target.value)}
+                  className="flex-1"
+                />
+                <Button variant="outline" size="icon" onClick={handleGetLocation} title="Use current location">
+                  <NavigationIcon className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="to" className="text-sm font-medium">
+                To
+              </label>
+              <Input
+                id="to"
+                placeholder="Enter destination"
+                value={toLocation}
+                onChange={(e) => setToLocation(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button onClick={handleSearch} className="w-full md:w-auto" disabled={!fromLocation || !toLocation}>
+            Find Routes
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Route Results */}
+      {routes.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-xl font-semibold">Available Routes</h2>
+          <div className="grid gap-4">
+            {routes.map((route) => (
+              <Card key={route.id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-lg">{route.busNumber}</h3>
+                        <div className="flex items-center gap-1">
+                          <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                          <span className="text-sm text-muted-foreground">{route.rating}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-4 w-4" />
+                          {route.duration}
+                        </div>
+                        <span>{route.stops} stops</span>
+                        <span className="font-medium text-primary">{route.fare}</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-col md:items-end gap-2">
+                      <div className="text-sm">
+                        <span className="text-muted-foreground">Next: </span>
+                        <span className="font-medium">{route.nextDeparture}</span>
+                      </div>
+                      <Button size="sm">Select Route</Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      )}
     </div>
-  );
+  )
 }
