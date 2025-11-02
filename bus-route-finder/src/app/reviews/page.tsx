@@ -1,107 +1,129 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Star, Search, MessageSquare, User, Calendar } from "lucide-react"
+import { Star, Search, MessageSquare, User, Calendar, Loader2 } from "lucide-react"
 
-// Mock data for bus routes and reviews
-const busRoutes = [
-  "Route 42 - Downtown Express",
-  "Route 15 - University Line",
-  "Express 7 - Airport Shuttle",
-  "Route 23 - Mall Connector",
-  "Route 8 - Hospital Route",
-  "Route 101 - Suburban Loop",
-  "Route 33 - Beach Line",
-  "Route 55 - Industrial Zone",
-]
+interface Bus {
+  id: string
+  name: string
+  status: string
+}
 
-const mockReviews = [
-  {
-    id: 1,
-    busRoute: "Route 42 - Downtown Express",
-    rating: 4,
-    author: "Sarah M.",
-    date: "2024-01-15",
-    comment: "Very reliable service. Buses are usually on time and clean. The drivers are professional and courteous.",
-  },
-  {
-    id: 2,
-    busRoute: "Route 42 - Downtown Express",
-    rating: 5,
-    author: "Mike R.",
-    date: "2024-01-10",
-    comment: "Excellent route for commuting to downtown. Fast and efficient service with comfortable seating.",
-  },
-  {
-    id: 3,
-    busRoute: "Route 15 - University Line",
-    rating: 3,
-    author: "Emma L.",
-    date: "2024-01-12",
-    comment: "Good service but can get very crowded during peak hours. More frequent buses would help.",
-  },
-  {
-    id: 4,
-    busRoute: "Express 7 - Airport Shuttle",
-    rating: 5,
-    author: "David K.",
-    date: "2024-01-08",
-    comment: "Perfect for airport trips! Always on schedule and has luggage space. Highly recommended.",
-  },
-]
+interface Review {
+  id: string
+  bus_id: string
+  bus_name: string
+  rating: number
+  author: string
+  created_at: string
+  comment: string
+}
 
 export default function BusReviews() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [selectedBus, setSelectedBus] = useState("")
+  const [selectedBusId, setSelectedBusId] = useState("")
+  const [selectedBusName, setSelectedBusName] = useState("")
   const [newReview, setNewReview] = useState({
     rating: 0,
     comment: "",
   })
-  const [reviews, setReviews] = useState(mockReviews)
+  const [buses, setBuses] = useState<Bus[]>([])
+  const [reviews, setReviews] = useState<Review[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [submittingReview, setSubmittingReview] = useState(false)
 
-  // Filter bus routes based on search term
+  useEffect(() => {
+    const fetchBuses = async () => {
+      try {
+        const response = await fetch("/api/buses")
+        if (response.ok) {
+          const data = await response.json()
+          setBuses(data.filter((b: Bus) => b.status === "active"))
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching buses:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchBuses()
+  }, [])
+
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        const url = selectedBusId ? `/api/reviews?bus_id=${selectedBusId}` : "/api/reviews"
+        const response = await fetch(url)
+        if (response.ok) {
+          const data = await response.json()
+          setReviews(data)
+        }
+      } catch (error) {
+        console.error("[v0] Error fetching reviews:", error)
+      }
+    }
+
+    if (buses.length > 0) {
+      fetchReviews()
+    }
+  }, [selectedBusId, buses])
+
   const filteredBusRoutes = useMemo(() => {
-    return busRoutes.filter((route) => route.toLowerCase().includes(searchTerm.toLowerCase()))
-  }, [searchTerm])
+    return buses.filter((bus) => bus.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  }, [searchTerm, buses])
 
-  // Filter reviews based on selected bus
   const filteredReviews = useMemo(() => {
-    if (!selectedBus) return reviews
-    return reviews.filter((review) => review.busRoute === selectedBus)
-  }, [reviews, selectedBus])
+    if (!selectedBusId) return reviews
+    return reviews.filter((review) => review.bus_id === selectedBusId)
+  }, [reviews, selectedBusId])
 
-  // Calculate average rating for selected bus
   const averageRating = useMemo(() => {
     if (filteredReviews.length === 0) return "0"
     const sum = filteredReviews.reduce((acc, review) => acc + review.rating, 0)
     return (sum / filteredReviews.length).toFixed(1)
   }, [filteredReviews])
 
-  const handleBusSelect = (busRoute: string) => {
-    setSelectedBus(busRoute)
+  const handleBusSelect = (bus: Bus) => {
+    setSelectedBusId(bus.id)
+    setSelectedBusName(bus.name)
     setSearchTerm("")
   }
 
-  const handleSubmitReview = () => {
-    if (selectedBus && newReview.rating > 0 && newReview.comment.trim()) {
-      const review = {
-        id: reviews.length + 1,
-        busRoute: selectedBus,
-        rating: newReview.rating,
-        author: "You",
-        date: new Date().toISOString().split("T")[0],
-        comment: newReview.comment,
+  const handleSubmitReview = async () => {
+    if (selectedBusId && newReview.rating > 0 && newReview.comment.trim()) {
+      setSubmittingReview(true)
+      try {
+        const response = await fetch("/api/reviews", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bus_id: selectedBusId,
+            bus_name: selectedBusName,
+            rating: newReview.rating,
+            author: "You",
+            comment: newReview.comment,
+          }),
+        })
+
+        if (response.ok) {
+          const newReviewData = await response.json()
+          setReviews([newReviewData, ...reviews])
+          setNewReview({ rating: 0, comment: "" })
+          setIsDialogOpen(false)
+        }
+      } catch (error) {
+        console.error("[v0] Error submitting review:", error)
+      } finally {
+        setSubmittingReview(false)
       }
-      setReviews([review, ...reviews])
-      setNewReview({ rating: 0, comment: "" })
-      setIsDialogOpen(false)
     }
   }
 
@@ -117,6 +139,14 @@ export default function BusReviews() {
             onClick={() => interactive && onRatingChange?.(star)}
           />
         ))}
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-4xl flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -150,14 +180,14 @@ export default function BusReviews() {
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">{filteredBusRoutes.length} route(s) found</p>
                 <div className="grid gap-2 max-h-48 overflow-y-auto">
-                  {filteredBusRoutes.map((route) => (
+                  {filteredBusRoutes.map((bus) => (
                     <Button
-                      key={route}
+                      key={bus.id}
                       variant="outline"
                       className="justify-start h-auto p-3 bg-transparent"
-                      onClick={() => handleBusSelect(route)}
+                      onClick={() => handleBusSelect(bus)}
                     >
-                      {route}
+                      {bus.name}
                     </Button>
                   ))}
                 </div>
@@ -168,13 +198,13 @@ export default function BusReviews() {
       </Card>
 
       {/* Selected Bus Reviews */}
-      {selectedBus && (
+      {selectedBusId && (
         <div className="space-y-6">
           <Card>
             <CardHeader>
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <CardTitle className="text-xl">{selectedBus}</CardTitle>
+                  <CardTitle className="text-xl">{selectedBusName}</CardTitle>
                   <div className="flex items-center gap-2 mt-2">
                     {renderStars(Math.round(Number.parseFloat(averageRating)))}
                     <span className="text-sm text-muted-foreground">
@@ -191,7 +221,7 @@ export default function BusReviews() {
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
-                      <DialogTitle>Write a Review for {selectedBus}</DialogTitle>
+                      <DialogTitle>Write a Review for {selectedBusName}</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
                       <div>
@@ -209,10 +239,17 @@ export default function BusReviews() {
                       </div>
                       <Button
                         onClick={handleSubmitReview}
-                        disabled={newReview.rating === 0 || !newReview.comment.trim()}
+                        disabled={newReview.rating === 0 || !newReview.comment.trim() || submittingReview}
                         className="w-full"
                       >
-                        Submit Review
+                        {submittingReview ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Submitting...
+                          </>
+                        ) : (
+                          "Submit Review"
+                        )}
                       </Button>
                     </div>
                   </DialogContent>
@@ -236,7 +273,9 @@ export default function BusReviews() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-sm text-muted-foreground">{review.date}</span>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date(review.created_at).toLocaleDateString()}
+                            </span>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -263,7 +302,7 @@ export default function BusReviews() {
       )}
 
       {/* No Bus Selected State */}
-      {!selectedBus && (
+      {!selectedBusId && (
         <Card>
           <CardContent className="p-12 text-center">
             <Search className="h-16 w-16 text-muted-foreground mx-auto mb-4" />

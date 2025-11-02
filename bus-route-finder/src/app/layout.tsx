@@ -5,11 +5,12 @@ import { GeistMono } from "geist/font/mono"
 import { Navigation } from "@/components/navigation"
 import { Suspense } from "react"
 import "./globals.css"
+import { AuthProvider } from "./providers/AuthProvider"
 
 export const metadata: Metadata = {
   title: "BusRoute - Smart Bus Transport App",
   description: "Plan your bus routes and read reviews with our modern transport app",
-  generator: "v0.app",
+  generator: "Jannatul Ferdousi",
 }
 
 export default function RootLayout({
@@ -20,9 +21,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
+        <AuthProvider>
         <Suspense fallback={<div>Loading...</div>}>
           <Navigation />
         </Suspense>
+        </AuthProvider>
         <main className="min-h-screen">{children}</main>
       </body>
     </html>
