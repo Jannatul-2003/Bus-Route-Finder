@@ -1,316 +1,3 @@
-// "use client"
-
-// import { useState, useEffect } from "react"
-// import { Button } from "@/components/ui/button"
-// import { Input } from "@/components/ui/input"
-// import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-// import { MapPin, NavigationIcon, ArrowRight, Loader2 } from "lucide-react"
-// import { Map } from "@/components/map"
-
-// interface Bus {
-//   id: string
-//   name: string
-//   status: string
-// }
-
-// interface Stop {
-//   id: string
-//   name: string
-//   latitude: number
-//   longitude: number
-// }
-
-// interface SearchResult {
-//   busId: string
-//   busName: string
-//   stopId: string
-//   stopName: string
-//   distance: number
-// }
-
-// interface PlannedRoute {
-//   from: Stop
-//   to: Stop
-//   buses: Bus[]
-// }
-
-// export default function RoutePlanner() {
-//   const [fromLocation, setFromLocation] = useState("")
-//   const [toLocation, setToLocation] = useState("")
-//   const [fromCoords, setFromCoords] = useState<{ lat: number; lng: number } | null>(null)
-//   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-//   const [plannedRoute, setPlannedRoute] = useState<PlannedRoute | null>(null)
-//   const [buses, setBuses] = useState<Bus[]>([])
-//   const [loading, setLoading] = useState(false)
-//   const [mapStops, setMapStops] = useState<Stop[]>([])
-
-//   useEffect(() => {
-//     const fetchActiveBuses = async () => {
-//       try {
-//         const response = await fetch("/api/buses")
-//         const data = await response.json()
-//         setBuses(data.filter((b: Bus) => b.status === "active"))
-//       } catch (error) {
-//         console.error("[v0] Error fetching buses:", error)
-//       }
-//     }
-//     fetchActiveBuses()
-//   }, [])
-
-//   const handleGetLocation = () => {
-//     if (navigator.geolocation) {
-//       navigator.geolocation.getCurrentPosition(
-//         (position) => {
-//           setFromLocation("Current Location")
-//           setFromCoords({
-//             lat: position.coords.latitude,
-//             lng: position.coords.longitude,
-//           })
-//         },
-//         (error) => {
-//           console.error("Error getting location:", error)
-//         },
-//       )
-//     }
-//   }
-
-//   const handleSearch = async () => {
-//     if (!toLocation) return
-
-//     setLoading(true)
-//     try {
-//       // Step 1: Search for destination stop
-//       const stopsResponse = await fetch(`/api/stops/search?q=${encodeURIComponent(toLocation)}`)
-//       const stops = await stopsResponse.json()
-
-//       if (!stops || stops.length === 0) {
-//         console.error("[v0] No stops found for destination")
-//         setLoading(false)
-//         return
-//       }
-
-//       const destinationStop = stops[0]
-//       setMapStops([destinationStop])
-
-//       // Step 2: Get buses serving this destination
-//       const busesResponse = await fetch(`/api/route-stops/by-stop?stop_id=${destinationStop.id}`)
-//       const servingBuses = await busesResponse.json()
-
-//       if (!servingBuses || servingBuses.length === 0) {
-//         console.error("[v0] No buses serve this destination")
-//         setLoading(false)
-//         return
-//       }
-
-//       // Step 3: For each bus, find closest stop to "from" location
-//       const results: SearchResult[] = []
-
-//       for (const bus of servingBuses) {
-//         try {
-//           const closestResponse = await fetch(
-//             `/api/route-stops/closest?bus_id=${bus.id}&latitude=${fromCoords?.lat || 0}&longitude=${fromCoords?.lng || 0}`,
-//           )
-//           const closestStop = await closestResponse.json()
-
-//           if (closestStop && closestStop.id) {
-//             results.push({
-//               busId: bus.id,
-//               busName: bus.name,
-//               stopId: closestStop.id,
-//               stopName: closestStop.name,
-//               distance: closestStop.distance,
-//             })
-//           }
-//         } catch (error) {
-//           console.error("[v0] Error finding closest stop for bus:", error)
-//         }
-//       }
-
-//       // Sort by distance
-//       results.sort((a, b) => a.distance - b.distance)
-//       setSearchResults(results)
-//     } catch (error) {
-//       console.error("[v0] Error searching routes:", error)
-//     } finally {
-//       setLoading(false)
-//     }
-//   }
-
-//   const handleResultClick = async (result: SearchResult) => {
-//     // Set the clicked stop as new destination
-//     setToLocation(result.stopName)
-
-//     // Fetch the stop details to get coordinates
-//     try {
-//       const stopsResponse = await fetch(`/api/stops/search?q=${encodeURIComponent(result.stopName)}`)
-//       const stops = await stopsResponse.json()
-//       if (stops && stops.length > 0) {
-//         const stop = stops[0]
-//         setMapStops([stop])
-
-//         // Update planned route
-//         if (fromCoords) {
-//           const bus = buses.find((b) => b.id === result.busId)
-//           if (bus) {
-//             setPlannedRoute({
-//               from: {
-//                 id: "current",
-//                 name: fromLocation,
-//                 latitude: fromCoords.lat,
-//                 longitude: fromCoords.lng,
-//               },
-//               to: stop,
-//               buses: [bus],
-//             })
-//           }
-//         }
-//       }
-//     } catch (error) {
-//       console.error("[v0] Error handling result click:", error)
-//     }
-//   }
-
-//   return (
-//     <div className="container mx-auto px-4 py-8 max-w-4xl">
-//       <div className="text-center mb-8">
-//         <h1 className="text-3xl font-bold text-balance mb-2">Plan Your Journey</h1>
-//         <p className="text-muted-foreground text-pretty">
-//           Find the best bus routes for your destination with real-time information
-//         </p>
-//       </div>
-
-//       {/* Route Planning Form */}
-//       <Card className="mb-8">
-//         <CardHeader>
-//           <CardTitle className="flex items-center gap-2">
-//             <MapPin className="h-5 w-5 text-primary" />
-//             Route Planner
-//           </CardTitle>
-//         </CardHeader>
-//         <CardContent className="space-y-4">
-//           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-//             <div className="space-y-2">
-//               <label htmlFor="from" className="text-sm font-medium">
-//                 From
-//               </label>
-//               <div className="flex gap-2">
-//                 <Input
-//                   id="from"
-//                   placeholder="Enter starting location"
-//                   value={fromLocation}
-//                   onChange={(e) => setFromLocation(e.target.value)}
-//                   className="flex-1"
-//                 />
-//                 <Button variant="outline" size="icon" onClick={handleGetLocation} title="Use current location">
-//                   <NavigationIcon className="h-4 w-4" />
-//                 </Button>
-//               </div>
-//             </div>
-//             <div className="space-y-2">
-//               <label htmlFor="to" className="text-sm font-medium">
-//                 To
-//               </label>
-//               <Input
-//                 id="to"
-//                 placeholder="Enter destination"
-//                 value={toLocation}
-//                 onChange={(e) => setToLocation(e.target.value)}
-//               />
-//             </div>
-//           </div>
-//           <Button
-//             onClick={handleSearch}
-//             className="w-full md:w-auto"
-//             disabled={!fromLocation || !toLocation || loading}
-//           >
-//             {loading ? (
-//               <>
-//                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-//                 Searching...
-//               </>
-//             ) : (
-//               "Find Routes"
-//             )}
-//           </Button>
-//         </CardContent>
-//       </Card>
-
-//       {/* Map Display */}
-//       {mapStops.length > 0 && (
-//         <Card className="mb-8">
-//           <CardHeader>
-//             <CardTitle>Route Map</CardTitle>
-//           </CardHeader>
-//           <CardContent>
-//             <Map stops={mapStops} />
-//           </CardContent>
-//         </Card>
-//       )}
-
-//       {/* Search Results */}
-//       {searchResults.length > 0 && (
-//         <div className="space-y-4 mb-8">
-//           <h2 className="text-xl font-semibold">Available Routes ({searchResults.length})</h2>
-//           <div className="grid gap-3">
-//             {searchResults.map((result, index) => (
-//               <Card
-//                 key={index}
-//                 className="cursor-pointer hover:shadow-md transition-shadow"
-//                 onClick={() => handleResultClick(result)}
-//               >
-//                 <CardContent className="p-4">
-//                   <div className="flex items-center justify-between">
-//                     <div className="flex-1">
-//                       <h3 className="font-semibold text-lg">{result.busName}</h3>
-//                       <p className="text-sm text-muted-foreground">{result.stopName}</p>
-//                     </div>
-//                     <div className="text-right">
-//                       <p className="font-medium text-primary">{result.distance.toFixed(2)} km</p>
-//                       <ArrowRight className="h-4 w-4 text-muted-foreground mt-1" />
-//                     </div>
-//                   </div>
-//                 </CardContent>
-//               </Card>
-//             ))}
-//           </div>
-//         </div>
-//       )}
-
-//       {/* Planned Route Display */}
-//       {plannedRoute && (
-//         <Card>
-//           <CardHeader>
-//             <CardTitle>Your Planned Route</CardTitle>
-//           </CardHeader>
-//           <CardContent className="space-y-4">
-//             <div className="flex items-center gap-4">
-//               <div className="flex-1">
-//                 <p className="text-sm text-muted-foreground">From</p>
-//                 <p className="font-semibold">{plannedRoute.from.name}</p>
-//               </div>
-//               <ArrowRight className="h-5 w-5 text-primary" />
-//               <div className="flex-1">
-//                 <p className="text-sm text-muted-foreground">To</p>
-//                 <p className="font-semibold">{plannedRoute.to.name}</p>
-//               </div>
-//             </div>
-//             <div className="pt-4 border-t">
-//               <p className="text-sm font-medium mb-2">Buses:</p>
-//               <div className="space-y-2">
-//                 {plannedRoute.buses.map((bus) => (
-//                   <div key={bus.id} className="flex items-center gap-2 text-sm">
-//                     <div className="w-2 h-2 rounded-full bg-primary" />
-//                     {bus.name}
-//                   </div>
-//                 ))}
-//               </div>
-//             </div>
-//           </CardContent>
-//         </Card>
-//       )}
-//     </div>
-//   )
-// }
 "use client"
 
 import * as React from "react"
@@ -403,6 +90,9 @@ export default function RoutePlannerPage() {
     }
   }, [darkMode])
 
+  // Track if a search has been performed
+  const [hasSearched, setHasSearched] = React.useState(false)
+
   // Handlers
   const handleGetLocation = () => {
     routePlannerStore.handleGetLocation()
@@ -410,10 +100,12 @@ export default function RoutePlannerPage() {
 
   const handleSearchStops = async () => {
     if (!state.fromCoords || !state.toCoords) {
-      // Try to geocode the locations if they're not coordinates yet
-      // For now, just show an error
+      routePlannerStore.setFromLocation("")
+      routePlannerStore.setToLocation("")
       return
     }
+
+    setHasSearched(true)
 
     // Discover stops near starting location
     await routePlannerStore.discoverStopsNearLocation(
@@ -429,6 +121,38 @@ export default function RoutePlannerPage() {
         state.destinationThreshold,
         false
       )
+    }
+  }
+
+  // Handle threshold changes - re-discover stops if search has been performed
+  // Requirement 1.5: Threshold change reactivity
+  const handleStartingThresholdChange = async (value: number | null) => {
+    if (value === null) return
+    
+    routePlannerStore.setStartingThreshold(value)
+    
+    // Re-discover stops if a search has already been performed
+    if (hasSearched && state.fromCoords) {
+      await routePlannerStore.discoverStopsNearLocation(
+        state.fromCoords,
+        value,
+        true
+      )
+    }
+  }
+
+  const handleDestinationThresholdChange = async (value: number | null) => {
+    routePlannerStore.setDestinationThreshold(value)
+    
+    // Re-discover stops if a search has already been performed
+    if (hasSearched && state.toCoords) {
+      if (value !== null) {
+        await routePlannerStore.discoverStopsNearLocation(
+          state.toCoords,
+          value,
+          false
+        )
+      }
     }
   }
 
@@ -571,17 +295,13 @@ export default function RoutePlannerPage() {
                 <ThresholdInput
                   label="Starting Location Threshold"
                   value={state.startingThreshold}
-                  onChange={(value) =>
-                    routePlannerStore.setStartingThreshold(value || 500)
-                  }
+                  onChange={handleStartingThresholdChange}
                   allowNoThreshold={false}
                 />
                 <ThresholdInput
                   label="Destination Location Threshold"
                   value={state.destinationThreshold}
-                  onChange={(value) =>
-                    routePlannerStore.setDestinationThreshold(value)
-                  }
+                  onChange={handleDestinationThresholdChange}
                   allowNoThreshold={true}
                 />
               </CardContent>
@@ -609,87 +329,227 @@ export default function RoutePlannerPage() {
               )}
             </Button>
 
+            {/* Walking Distance Display */}
+            {(state.selectedOnboardingStop || state.selectedOffboardingStop) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">🚶 Walking Distances</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Walking distance to onboarding stop */}
+                  {state.selectedOnboardingStop && state.walkingDistanceToOnboarding !== null && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2">
+                        <svg
+                          className="size-5 text-muted-foreground"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                          />
+                        </svg>
+                        <span className="text-sm font-medium">To {state.selectedOnboardingStop.name}</span>
+                      </div>
+                      <span className="text-sm font-semibold">
+                        {state.walkingDistanceToOnboarding < 1000
+                          ? `${Math.round(state.walkingDistanceToOnboarding)}m`
+                          : `${(state.walkingDistanceToOnboarding / 1000).toFixed(2)}km`}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Walking distance from offboarding stop */}
+                  {state.selectedOffboardingStop && state.walkingDistanceFromOffboarding !== null && (
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                      <div className="flex items-center gap-2">
+                        <svg
+                          className="size-5 text-muted-foreground"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"
+                          />
+                        </svg>
+                        <span className="text-sm font-medium">From {state.selectedOffboardingStop.name}</span>
+                      </div>
+                      <span className="text-sm font-semibold">
+                        {state.walkingDistanceFromOffboarding < 1000
+                          ? `${Math.round(state.walkingDistanceFromOffboarding)}m`
+                          : `${(state.walkingDistanceFromOffboarding / 1000).toFixed(2)}km`}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Warning for excessive walking distance (Requirement 9.5) */}
+                  {((state.walkingDistanceToOnboarding !== null && state.walkingDistanceToOnboarding > 2000) ||
+                    (state.walkingDistanceFromOffboarding !== null && state.walkingDistanceFromOffboarding > 2000)) && (
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                      <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
+                          Long Walking Distance
+                        </p>
+                        <p className="text-xs text-orange-800 dark:text-orange-300 mt-1">
+                          One or more walking distances exceed 2km. Consider selecting closer stops or adjusting your thresholds.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Stop Selection */}
             {(state.startingStops.length > 0 ||
-              state.destinationStops.length > 0) && (
+              state.destinationStops.length > 0 ||
+              (state.fromCoords && state.toCoords && !state.loading)) && (
               <div className="space-y-6">
                 {/* Starting Stops */}
-                {state.startingStops.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">
-                        📍 Nearby Stops (Starting Location)
-                      </CardTitle>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      📍 Nearby Stops (Starting Location)
+                    </CardTitle>
+                    {state.startingStops.length > 0 && (
                       <p className="text-sm text-muted-foreground">
                         {state.startingStops.length} stop(s) found within{" "}
                         {state.startingThreshold}m
                       </p>
-                    </CardHeader>
-                    <CardContent>
-                      {state.loading ? (
-                        <div className="space-y-3">
-                          <StopCardSkeleton />
-                          <StopCardSkeleton />
-                          <StopCardSkeleton />
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    {state.loading ? (
+                      <div className="space-y-3">
+                        <StopCardSkeleton />
+                        <StopCardSkeleton />
+                        <StopCardSkeleton />
+                      </div>
+                    ) : state.startingStops.length > 0 ? (
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {state.startingStops.map((stop) => (
+                          <StopSelectionCard
+                            key={stop.id}
+                            stop={stop}
+                            isSelected={
+                              state.selectedOnboardingStop?.id === stop.id
+                            }
+                            onSelect={handleOnboardingStopSelect}
+                            selectionMode="radio"
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="rounded-full bg-muted p-4">
+                            <svg
+                              className="size-8 text-muted-foreground"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={1.5}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              No stops found
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Try increasing the threshold or selecting a
+                              different location
+                            </p>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                          {state.startingStops.map((stop) => (
-                            <StopSelectionCard
-                              key={stop.id}
-                              stop={stop}
-                              isSelected={
-                                state.selectedOnboardingStop?.id === stop.id
-                              }
-                              onSelect={handleOnboardingStopSelect}
-                              selectionMode="radio"
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
                 {/* Destination Stops */}
-                {state.destinationStops.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">
-                        🎯 Nearby Stops (Destination)
-                      </CardTitle>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      🎯 Nearby Stops (Destination)
+                    </CardTitle>
+                    {state.destinationStops.length > 0 && (
                       <p className="text-sm text-muted-foreground">
                         {state.destinationStops.length} stop(s) found
                         {state.destinationThreshold !== null
                           ? ` within ${state.destinationThreshold}m`
                           : ""}
                       </p>
-                    </CardHeader>
-                    <CardContent>
-                      {state.loading ? (
-                        <div className="space-y-3">
-                          <StopCardSkeleton />
-                          <StopCardSkeleton />
-                          <StopCardSkeleton />
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    {state.loading ? (
+                      <div className="space-y-3">
+                        <StopCardSkeleton />
+                        <StopCardSkeleton />
+                        <StopCardSkeleton />
+                      </div>
+                    ) : state.destinationStops.length > 0 ? (
+                      <div className="space-y-3 max-h-96 overflow-y-auto">
+                        {state.destinationStops.map((stop) => (
+                          <StopSelectionCard
+                            key={stop.id}
+                            stop={stop}
+                            isSelected={
+                              state.selectedOffboardingStop?.id === stop.id
+                            }
+                            onSelect={handleOffboardingStopSelect}
+                            selectionMode="radio"
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="rounded-full bg-muted p-4">
+                            <svg
+                              className="size-8 text-muted-foreground"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={1.5}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              No stops found
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {state.destinationThreshold === null
+                                ? "Click 'Search Stops' to find all stops"
+                                : "Try increasing the threshold or selecting a different location"}
+                            </p>
+                          </div>
                         </div>
-                      ) : (
-                        <div className="space-y-3 max-h-96 overflow-y-auto">
-                          {state.destinationStops.map((stop) => (
-                            <StopSelectionCard
-                              key={stop.id}
-                              stop={stop}
-                              isSelected={
-                                state.selectedOffboardingStop?.id === stop.id
-                              }
-                              onSelect={handleOffboardingStopSelect}
-                              selectionMode="radio"
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             )}
           </div>
@@ -717,14 +577,14 @@ export default function RoutePlannerPage() {
         </div>
 
         {/* Bus Results Section (Full Width) */}
-        {state.availableBuses.length > 0 && (
+        {state.allBuses.length > 0 && (
           <div className="mt-8 space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-foreground">
                 🚌 Available Buses
               </h2>
               <p className="text-sm text-muted-foreground">
-                Showing {state.availableBuses.length} bus(es)
+                Showing {state.availableBuses.length} of {state.allBuses.length} bus(es)
               </p>
             </div>
 
@@ -754,12 +614,43 @@ export default function RoutePlannerPage() {
                 <BusCardSkeleton />
                 <BusCardSkeleton />
               </div>
-            ) : (
+            ) : state.availableBuses.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {state.availableBuses.map((bus) => (
                   <BusResultCard key={bus.id} bus={bus} />
                 ))}
               </div>
+            ) : (
+              // Empty state when filters eliminate all results
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="rounded-full bg-muted p-6">
+                      <svg
+                        className="size-12 text-muted-foreground"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground mb-2">
+                        No buses match your filters
+                      </h3>
+                      <p className="text-sm text-muted-foreground max-w-md">
+                        Try adjusting your filter criteria to see more results. There are {state.allBuses.length} total bus(es) available.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
         )}

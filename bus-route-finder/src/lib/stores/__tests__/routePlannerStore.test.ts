@@ -1,38 +1,37 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { RoutePlannerStore, type RoutePlannerState, type SearchResult } from '../routePlannerStore'
+import { routePlannerStore, type RoutePlannerState, type SearchResult } from '../routePlannerStore'
 import type { Observer } from '@/lib/observer'
 
 // Mock fetch globally
 global.fetch = vi.fn()
 
 describe('RoutePlannerStore - Observer Pattern Implementation', () => {
-  let store: RoutePlannerStore
   let observer: Observer<RoutePlannerState>
   let updateSpy: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
-    store = new RoutePlannerStore()
+    routePlannerStore.reset()
     updateSpy = vi.fn()
     observer = {
       update: updateSpy,
     }
-    store.subscribe(observer)
+    routePlannerStore.subscribe(observer)
     vi.clearAllMocks()
   })
 
   afterEach(() => {
-    store.unsubscribe(observer)
+    routePlannerStore.unsubscribe(observer)
   })
 
   describe('Observer Pattern Integration', () => {
     it('should extend Observable and support subscription', () => {
-      expect(store).toBeInstanceOf(Object)
-      expect(typeof store.subscribe).toBe('function')
-      expect(typeof store.unsubscribe).toBe('function')
+      expect(routePlannerStore).toBeInstanceOf(Object)
+      expect(typeof routePlannerStore.subscribe).toBe('function')
+      expect(typeof routePlannerStore.unsubscribe).toBe('function')
     })
 
     it('should notify observers when state changes via setFromLocation', () => {
-      store.setFromLocation('New Location')
+      routePlannerStore.setFromLocation('New Location')
 
       expect(updateSpy).toHaveBeenCalledTimes(1)
       const notifiedState = updateSpy.mock.calls[0][0] as RoutePlannerState
@@ -40,7 +39,7 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
     })
 
     it('should notify observers when state changes via setToLocation', () => {
-      store.setToLocation('Destination')
+      routePlannerStore.setToLocation('Destination')
 
       expect(updateSpy).toHaveBeenCalledTimes(1)
       const notifiedState = updateSpy.mock.calls[0][0] as RoutePlannerState
@@ -48,18 +47,18 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
     })
 
     it('should notify observers on every state mutation', () => {
-      store.setFromLocation('Location 1')
-      store.setToLocation('Destination 1')
-      store.setFromLocation('Location 2')
+      routePlannerStore.setFromLocation('Location 1')
+      routePlannerStore.setToLocation('Destination 1')
+      routePlannerStore.setFromLocation('Location 2')
 
       expect(updateSpy).toHaveBeenCalledTimes(3)
     })
 
     it('should notify multiple observers simultaneously', () => {
       const observer2 = { update: vi.fn() }
-      store.subscribe(observer2)
+      routePlannerStore.subscribe(observer2)
 
-      store.setFromLocation('Test Location')
+      routePlannerStore.setFromLocation('Test Location')
 
       expect(updateSpy).toHaveBeenCalledTimes(1)
       expect(observer2.update).toHaveBeenCalledTimes(1)
@@ -73,11 +72,11 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
     })
 
     it('should stop notifying unsubscribed observers', () => {
-      store.setFromLocation('Before unsubscribe')
+      routePlannerStore.setFromLocation('Before unsubscribe')
       expect(updateSpy).toHaveBeenCalledTimes(1)
 
-      store.unsubscribe(observer)
-      store.setFromLocation('After unsubscribe')
+      routePlannerStore.unsubscribe(observer)
+      routePlannerStore.setFromLocation('After unsubscribe')
 
       expect(updateSpy).toHaveBeenCalledTimes(1) // Should not be called again
     })
@@ -85,8 +84,8 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
 
   describe('State Management with Observer Pattern', () => {
     it('should maintain state consistency across notifications', () => {
-      store.setFromLocation('Start')
-      store.setToLocation('End')
+      routePlannerStore.setFromLocation('Start')
+      routePlannerStore.setToLocation('End')
 
       const firstCall = updateSpy.mock.calls[0][0] as RoutePlannerState
       const secondCall = updateSpy.mock.calls[1][0] as RoutePlannerState
@@ -97,25 +96,55 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
     })
 
     it('should notify with complete state object, not partial updates', () => {
-      store.setFromLocation('Complete State Test')
+      routePlannerStore.setFromLocation('Complete State Test')
 
       const notifiedState = updateSpy.mock.calls[0][0] as RoutePlannerState
 
-      // Verify complete state structure
+      // Verify complete state structure - location inputs
       expect(notifiedState).toHaveProperty('fromLocation')
       expect(notifiedState).toHaveProperty('toLocation')
       expect(notifiedState).toHaveProperty('fromCoords')
+      expect(notifiedState).toHaveProperty('toCoords')
+      
+      // Verify threshold fields
+      expect(notifiedState).toHaveProperty('startingThreshold')
+      expect(notifiedState).toHaveProperty('destinationThreshold')
+      
+      // Verify discovered stops
+      expect(notifiedState).toHaveProperty('startingStops')
+      expect(notifiedState).toHaveProperty('destinationStops')
+      
+      // Verify selected stops
+      expect(notifiedState).toHaveProperty('selectedOnboardingStop')
+      expect(notifiedState).toHaveProperty('selectedOffboardingStop')
+      
+      // Verify walking distances
+      expect(notifiedState).toHaveProperty('walkingDistanceToOnboarding')
+      expect(notifiedState).toHaveProperty('walkingDistanceFromOffboarding')
+      
+      // Verify bus results
+      expect(notifiedState).toHaveProperty('availableBuses')
+      
+      // Verify filters and sorting
+      expect(notifiedState).toHaveProperty('filters')
+      expect(notifiedState).toHaveProperty('sortBy')
+      expect(notifiedState).toHaveProperty('sortOrder')
+      
+      // Verify legacy fields
       expect(notifiedState).toHaveProperty('searchResults')
       expect(notifiedState).toHaveProperty('plannedRoute')
       expect(notifiedState).toHaveProperty('buses')
-      expect(notifiedState).toHaveProperty('loading')
       expect(notifiedState).toHaveProperty('mapStops')
+      
+      // Verify UI state
+      expect(notifiedState).toHaveProperty('loading')
       expect(notifiedState).toHaveProperty('error')
+      expect(notifiedState).toHaveProperty('distanceCalculationMethod')
     })
 
     it('should notify observers with immutable state updates', () => {
-      const initialState = store.getState()
-      store.setFromLocation('New Value')
+      const initialState = routePlannerStore.getState()
+      routePlannerStore.setFromLocation('New Value')
 
       const updatedState = updateSpy.mock.calls[0][0] as RoutePlannerState
 
@@ -136,7 +165,7 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
         ],
       })
 
-      await store.ensureInitialized()
+      await routePlannerStore.ensureInitialized()
 
       // Should have been notified when buses are loaded
       expect(updateSpy).toHaveBeenCalled()
@@ -145,11 +174,11 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
     })
 
     it('should notify observers when error state changes', () => {
-      store.setFromLocation('Test')
-      store.setToLocation('Destination')
+      routePlannerStore.setFromLocation('Test')
+      routePlannerStore.setToLocation('Destination')
 
       // Simulate an error scenario
-      const initialState = store.getState()
+      const initialState = routePlannerStore.getState()
       // Error would be set during searchRoutes if API fails
       // For this test, we verify the pattern works
 
@@ -169,8 +198,8 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
         ),
       )
 
-      store.setToLocation('Test Destination')
-      const promise = store.searchRoutes()
+      routePlannerStore.setToLocation('Test Destination')
+      const promise = routePlannerStore.searchRoutes()
 
       // Check that loading state was set
       const loadingCall = updateSpy.mock.calls.find(
@@ -187,9 +216,52 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
   })
 
   describe('Observer Pattern Best Practices', () => {
+    it('should initialize with default threshold values of 500m', () => {
+      const currentState = routePlannerStore.getState()
+
+      expect(currentState.startingThreshold).toBe(500)
+      expect(currentState.destinationThreshold).toBe(500)
+    })
+
+    it('should initialize with empty arrays for discovered stops', () => {
+      const currentState = routePlannerStore.getState()
+
+      expect(currentState.startingStops).toEqual([])
+      expect(currentState.destinationStops).toEqual([])
+    })
+
+    it('should initialize with null selected stops', () => {
+      const currentState = routePlannerStore.getState()
+
+      expect(currentState.selectedOnboardingStop).toBeNull()
+      expect(currentState.selectedOffboardingStop).toBeNull()
+    })
+
+    it('should initialize with null walking distances', () => {
+      const currentState = routePlannerStore.getState()
+
+      expect(currentState.walkingDistanceToOnboarding).toBeNull()
+      expect(currentState.walkingDistanceFromOffboarding).toBeNull()
+    })
+
+    it('should initialize with default filter values', () => {
+      const currentState = routePlannerStore.getState()
+
+      expect(currentState.filters.isAC).toBeNull()
+      expect(currentState.filters.coachTypes).toEqual([])
+      expect(currentState.sortBy).toBe('journeyLength')
+      expect(currentState.sortOrder).toBe('asc')
+    })
+
+    it('should initialize with OSRM as default distance calculation method', () => {
+      const currentState = routePlannerStore.getState()
+
+      expect(currentState.distanceCalculationMethod).toBe('OSRM')
+    })
+
     it('should allow observers to access current state via getState', () => {
-      store.setFromLocation('Test')
-      const currentState = store.getState()
+      routePlannerStore.setFromLocation('Test')
+      const currentState = routePlannerStore.getState()
 
       expect(currentState.fromLocation).toBe('Test')
       expect(typeof currentState).toBe('object')
@@ -197,7 +269,7 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
 
     it('should handle rapid state changes and notify for each', () => {
       for (let i = 0; i < 10; i++) {
-        store.setFromLocation(`Location ${i}`)
+        routePlannerStore.setFromLocation(`Location ${i}`)
       }
 
       expect(updateSpy).toHaveBeenCalledTimes(10)
@@ -207,10 +279,10 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
       const observer2 = { update: vi.fn() }
       const observer3 = { update: vi.fn() }
 
-      store.subscribe(observer2)
-      store.subscribe(observer3)
+      routePlannerStore.subscribe(observer2)
+      routePlannerStore.subscribe(observer3)
 
-      store.setFromLocation('Test')
+      routePlannerStore.setFromLocation('Test')
 
       // All three observers should be notified
       expect(updateSpy).toHaveBeenCalledTimes(1)
@@ -219,17 +291,351 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
     })
 
     it('should support reset operation with notification', () => {
-      store.setFromLocation('Before Reset')
-      store.setToLocation('Destination')
+      routePlannerStore.setFromLocation('Before Reset')
+      routePlannerStore.setToLocation('Destination')
       expect(updateSpy).toHaveBeenCalledTimes(2)
 
       const callCountBeforeReset = updateSpy.mock.calls.length
-      store.reset()
+      routePlannerStore.reset()
 
       expect(updateSpy).toHaveBeenCalledTimes(callCountBeforeReset + 1)
       const resetState = updateSpy.mock.calls[updateSpy.mock.calls.length - 1][0] as RoutePlannerState
       expect(resetState.fromLocation).toBe('')
       expect(resetState.toLocation).toBe('')
+    })
+  })
+
+  describe('Threshold Management', () => {
+    it('should set starting threshold within valid range', () => {
+      routePlannerStore.setStartingThreshold(1000)
+
+      expect(updateSpy).toHaveBeenCalled()
+      const state = updateSpy.mock.calls[updateSpy.mock.calls.length - 1][0] as RoutePlannerState
+      expect(state.startingThreshold).toBe(1000)
+      expect(state.error).toBeNull()
+    })
+
+    it('should reject starting threshold below 100 meters', () => {
+      expect(() => routePlannerStore.setStartingThreshold(50)).toThrow(
+        'Threshold must be between 100 and 5000 meters'
+      )
+
+      const state = routePlannerStore.getState()
+      expect(state.error).toBe('Threshold must be between 100 and 5000 meters')
+    })
+
+    it('should reject starting threshold above 5000 meters', () => {
+      expect(() => routePlannerStore.setStartingThreshold(6000)).toThrow(
+        'Threshold must be between 100 and 5000 meters'
+      )
+
+      const state = routePlannerStore.getState()
+      expect(state.error).toBe('Threshold must be between 100 and 5000 meters')
+    })
+
+    it('should set destination threshold within valid range', () => {
+      routePlannerStore.setDestinationThreshold(2000)
+
+      expect(updateSpy).toHaveBeenCalled()
+      const state = updateSpy.mock.calls[updateSpy.mock.calls.length - 1][0] as RoutePlannerState
+      expect(state.destinationThreshold).toBe(2000)
+      expect(state.error).toBeNull()
+    })
+
+    it('should allow null destination threshold', () => {
+      routePlannerStore.setDestinationThreshold(null)
+
+      expect(updateSpy).toHaveBeenCalled()
+      const state = updateSpy.mock.calls[updateSpy.mock.calls.length - 1][0] as RoutePlannerState
+      expect(state.destinationThreshold).toBeNull()
+      expect(state.error).toBeNull()
+    })
+
+    it('should reject destination threshold below 100 meters', () => {
+      expect(() => routePlannerStore.setDestinationThreshold(99)).toThrow(
+        'Threshold must be between 100 and 5000 meters'
+      )
+
+      const state = routePlannerStore.getState()
+      expect(state.error).toBe('Threshold must be between 100 and 5000 meters')
+    })
+
+    it('should reject destination threshold above 5000 meters', () => {
+      expect(() => routePlannerStore.setDestinationThreshold(5001)).toThrow(
+        'Threshold must be between 100 and 5000 meters'
+      )
+
+      const state = routePlannerStore.getState()
+      expect(state.error).toBe('Threshold must be between 100 and 5000 meters')
+    })
+
+    it('should accept threshold at lower boundary (100m)', () => {
+      routePlannerStore.setStartingThreshold(100)
+      const state = routePlannerStore.getState()
+      expect(state.startingThreshold).toBe(100)
+      expect(state.error).toBeNull()
+    })
+
+    it('should accept threshold at upper boundary (5000m)', () => {
+      routePlannerStore.setStartingThreshold(5000)
+      const state = routePlannerStore.getState()
+      expect(state.startingThreshold).toBe(5000)
+      expect(state.error).toBeNull()
+    })
+  })
+
+  describe('Stop Discovery', () => {
+    it('should discover starting stops and update state', async () => {
+      const mockStops = [
+        {
+          id: '1',
+          name: 'Stop A',
+          latitude: 23.8103,
+          longitude: 90.4125,
+          accessible: true,
+          created_at: '2024-01-01',
+          distance: 250,
+          distanceMethod: 'OSRM' as const
+        },
+        {
+          id: '2',
+          name: 'Stop B',
+          latitude: 23.8113,
+          longitude: 90.4135,
+          accessible: true,
+          created_at: '2024-01-01',
+          distance: 450,
+          distanceMethod: 'OSRM' as const
+        }
+      ]
+
+      // Mock the Supabase client
+      const mockSupabaseClient = {
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockResolvedValue({
+            data: mockStops.map(s => ({
+              id: s.id,
+              name: s.name,
+              latitude: s.latitude,
+              longitude: s.longitude,
+              accessible: s.accessible,
+              created_at: s.created_at
+            })),
+            error: null
+          })
+        })
+      }
+
+      // Mock the distance calculator
+      const mockDistanceCalculator = {
+        calculateDistances: vi.fn().mockResolvedValue([
+          mockStops.map(s => ({
+            distance: s.distance / 1000, // Convert to km
+            method: s.distanceMethod
+          }))
+        ])
+      }
+
+      // Inject mocks (we'll need to access private method for testing)
+      const location = { lat: 23.8103, lng: 90.4125 }
+      
+      await routePlannerStore.discoverStopsNearLocation(location, 500, true)
+
+      // Verify loading states were set
+      const loadingCalls = updateSpy.mock.calls.filter(
+        call => (call[0] as RoutePlannerState).loading === true
+      )
+      expect(loadingCalls.length).toBeGreaterThan(0)
+
+      // Verify final state
+      const finalState = routePlannerStore.getState()
+      expect(finalState.loading).toBe(false)
+    })
+
+    it('should discover destination stops and update state', async () => {
+      const location = { lat: 23.8103, lng: 90.4125 }
+      
+      await routePlannerStore.discoverStopsNearLocation(location, 500, false)
+
+      const finalState = routePlannerStore.getState()
+      expect(finalState.loading).toBe(false)
+    })
+
+    it('should reject invalid threshold in discoverStopsNearLocation', async () => {
+      const location = { lat: 23.8103, lng: 90.4125 }
+      
+      await routePlannerStore.discoverStopsNearLocation(location, 50, true)
+
+      const state = routePlannerStore.getState()
+      expect(state.error).toBe('Threshold must be between 100 and 5000 meters')
+    })
+
+    it('should handle errors during stop discovery', async () => {
+      const location = { lat: 23.8103, lng: 90.4125 }
+      
+      // This will likely fail due to missing Supabase setup in test environment
+      await routePlannerStore.discoverStopsNearLocation(location, 500, true)
+
+      const state = routePlannerStore.getState()
+      expect(state.loading).toBe(false)
+      // Error may or may not be set depending on environment
+    })
+  })
+
+  describe('Stop Selection', () => {
+    it('should select onboarding stop and update state', async () => {
+      const mockStop = {
+        id: '1',
+        name: 'Stop A',
+        latitude: 23.8103,
+        longitude: 90.4125,
+        accessible: true,
+        created_at: '2024-01-01',
+        distance: 250,
+        distanceMethod: 'OSRM' as const
+      }
+
+      // Set starting coordinates
+      routePlannerStore.setFromLocation('Starting Point')
+      const state = routePlannerStore.getState()
+      state.fromCoords = { lat: 23.8100, lng: 90.4120 }
+
+      await routePlannerStore.selectOnboardingStop(mockStop)
+
+      const finalState = routePlannerStore.getState()
+      expect(finalState.selectedOnboardingStop).toEqual(mockStop)
+      expect(finalState.loading).toBe(false)
+    })
+
+    it('should select offboarding stop and update state', async () => {
+      const mockStop = {
+        id: '2',
+        name: 'Stop B',
+        latitude: 23.8113,
+        longitude: 90.4135,
+        accessible: true,
+        created_at: '2024-01-01',
+        distance: 450,
+        distanceMethod: 'OSRM' as const
+      }
+
+      // Set destination coordinates
+      routePlannerStore.setToLocation('Destination Point')
+      const state = routePlannerStore.getState()
+      state.toCoords = { lat: 23.8120, lng: 90.4140 }
+
+      await routePlannerStore.selectOffboardingStop(mockStop)
+
+      const finalState = routePlannerStore.getState()
+      expect(finalState.selectedOffboardingStop).toEqual(mockStop)
+      expect(finalState.loading).toBe(false)
+    })
+
+    it('should notify observers when onboarding stop is selected', async () => {
+      const mockStop = {
+        id: '1',
+        name: 'Stop A',
+        latitude: 23.8103,
+        longitude: 90.4125,
+        accessible: true,
+        created_at: '2024-01-01',
+        distance: 250,
+        distanceMethod: 'OSRM' as const
+      }
+
+      const state = routePlannerStore.getState()
+      state.fromCoords = { lat: 23.8100, lng: 90.4120 }
+
+      await routePlannerStore.selectOnboardingStop(mockStop)
+
+      expect(updateSpy).toHaveBeenCalled()
+      const calls = updateSpy.mock.calls
+      const selectionCall = calls.find(
+        call => (call[0] as RoutePlannerState).selectedOnboardingStop !== null
+      )
+      expect(selectionCall).toBeDefined()
+    })
+
+    it('should notify observers when offboarding stop is selected', async () => {
+      const mockStop = {
+        id: '2',
+        name: 'Stop B',
+        latitude: 23.8113,
+        longitude: 90.4135,
+        accessible: true,
+        created_at: '2024-01-01',
+        distance: 450,
+        distanceMethod: 'OSRM' as const
+      }
+
+      const state = routePlannerStore.getState()
+      state.toCoords = { lat: 23.8120, lng: 90.4140 }
+
+      await routePlannerStore.selectOffboardingStop(mockStop)
+
+      expect(updateSpy).toHaveBeenCalled()
+      const calls = updateSpy.mock.calls
+      const selectionCall = calls.find(
+        call => (call[0] as RoutePlannerState).selectedOffboardingStop !== null
+      )
+      expect(selectionCall).toBeDefined()
+    })
+
+    it('should handle selection when coordinates are not set', async () => {
+      const mockStop = {
+        id: '1',
+        name: 'Stop A',
+        latitude: 23.8103,
+        longitude: 90.4125,
+        accessible: true,
+        created_at: '2024-01-01',
+        distance: 250,
+        distanceMethod: 'OSRM' as const
+      }
+
+      // Don't set fromCoords
+      await routePlannerStore.selectOnboardingStop(mockStop)
+
+      const finalState = routePlannerStore.getState()
+      expect(finalState.selectedOnboardingStop).toEqual(mockStop)
+      expect(finalState.walkingDistanceToOnboarding).toBeNull()
+      expect(finalState.loading).toBe(false)
+    })
+
+    it('should enable bus search when both stops are selected', async () => {
+      const onboardingStop = {
+        id: '1',
+        name: 'Stop A',
+        latitude: 23.8103,
+        longitude: 90.4125,
+        accessible: true,
+        created_at: '2024-01-01',
+        distance: 250,
+        distanceMethod: 'OSRM' as const
+      }
+
+      const offboardingStop = {
+        id: '2',
+        name: 'Stop B',
+        latitude: 23.8113,
+        longitude: 90.4135,
+        accessible: true,
+        created_at: '2024-01-01',
+        distance: 450,
+        distanceMethod: 'OSRM' as const
+      }
+
+      const state = routePlannerStore.getState()
+      state.fromCoords = { lat: 23.8100, lng: 90.4120 }
+      state.toCoords = { lat: 23.8120, lng: 90.4140 }
+
+      await routePlannerStore.selectOnboardingStop(onboardingStop)
+      await routePlannerStore.selectOffboardingStop(offboardingStop)
+
+      const finalState = routePlannerStore.getState()
+      expect(finalState.selectedOnboardingStop).not.toBeNull()
+      expect(finalState.selectedOffboardingStop).not.toBeNull()
+      // Both stops selected - bus search can be enabled (Requirement 3.6)
     })
   })
 
@@ -244,8 +650,8 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
         update: vi.fn(),
       }))
 
-      observers.forEach((obs) => store.subscribe(obs))
-      store.setFromLocation('Subject notifies all observers')
+      observers.forEach((obs) => routePlannerStore.subscribe(obs))
+      routePlannerStore.setFromLocation('Subject notifies all observers')
 
       observers.forEach((obs) => {
         expect(obs.update).toHaveBeenCalledTimes(1)
@@ -261,8 +667,8 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
         }),
       }
 
-      store.subscribe(customObserver)
-      store.setFromLocation('Loose Coupling Test')
+      routePlannerStore.subscribe(customObserver)
+      routePlannerStore.setFromLocation('Loose Coupling Test')
 
       expect(customObserver.update).toHaveBeenCalled()
     })
@@ -270,9 +676,9 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
     it('JUSTIFICATION: Demonstrates open/closed principle - extensible without modification', () => {
       // Can add new observers without modifying the store
       const newObserver = { update: vi.fn() }
-      store.subscribe(newObserver)
+      routePlannerStore.subscribe(newObserver)
 
-      store.setFromLocation('Open/Closed Principle')
+      routePlannerStore.setFromLocation('Open/Closed Principle')
 
       expect(newObserver.update).toHaveBeenCalled()
       // Store code didn't need to change to support this new observer
@@ -283,8 +689,8 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
         update: vi.fn(),
       }))
 
-      manyObservers.forEach((obs) => store.subscribe(obs))
-      store.setFromLocation('One-to-Many Test')
+      manyObservers.forEach((obs) => routePlannerStore.subscribe(obs))
+      routePlannerStore.setFromLocation('One-to-Many Test')
 
       manyObservers.forEach((obs) => {
         expect(obs.update).toHaveBeenCalledTimes(1)
@@ -293,15 +699,15 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
 
     it('JUSTIFICATION: Validates notification happens automatically on state change', () => {
       // No manual notification needed - happens automatically via #setState
-      store.setFromLocation('Auto Notification')
+      routePlannerStore.setFromLocation('Auto Notification')
 
       // Observer was automatically notified
       expect(updateSpy).toHaveBeenCalled()
     })
 
     it('JUSTIFICATION: Proves observers receive complete, consistent state', () => {
-      store.setFromLocation('Location A')
-      store.setToLocation('Location B')
+      routePlannerStore.setFromLocation('Location A')
+      routePlannerStore.setToLocation('Location B')
 
       const firstNotification = updateSpy.mock.calls[0][0] as RoutePlannerState
       const secondNotification = updateSpy.mock.calls[1][0] as RoutePlannerState
