@@ -1,13 +1,14 @@
-import { createBrowserClient } from "@supabase/ssr"
+import SupabaseClientSingleton from "./SupabaseClientSingleton"
 
-let supabaseClient: ReturnType<typeof createBrowserClient> | null = null
-
+/**
+ * Get the Supabase browser client using Singleton pattern
+ * 
+ * This function uses the Singleton pattern to ensure only one instance
+ * of the Supabase client exists throughout the application lifecycle.
+ * 
+ * @returns The Supabase client instance
+ */
 export function getSupabaseClient() {
-  if (!supabaseClient) {
-    supabaseClient = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "YOUR_SUPABASE_URL",
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "YOUR_SUPABASE_ANON_KEY",
-    )
-  }
-  return supabaseClient
+  const singleton = SupabaseClientSingleton.getInstance()
+  return singleton.getClient()
 }

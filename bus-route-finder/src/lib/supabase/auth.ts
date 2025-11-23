@@ -1,9 +1,6 @@
-import { createBrowserClient } from "@supabase/ssr"
+import { getSupabaseClient } from "./client"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "PLACEHOLDER_URL"
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "PLACEHOLDER_KEY"
-
-export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
+export const supabase = getSupabaseClient()
 
 export const auth = {
   signUp: async (email: string, password: string) => {
@@ -12,8 +9,7 @@ export const auth = {
       password,
       options: {
         emailRedirectTo:
-  process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL ||
-  `${window.location.origin}/auth/callback`,
+          process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/auth/callback`,
 
         // emailRedirectTo: process.env.NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL || `${window.location.origin}/auth/confirm`,
       },

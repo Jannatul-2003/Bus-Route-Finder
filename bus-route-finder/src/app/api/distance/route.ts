@@ -1,5 +1,12 @@
 import { NextResponse } from "next/server"
+import { DistanceCalculator } from "@/lib/strategies/DistanceCalculator"
 
+/**
+ * Distance Calculation API Route
+ * 
+ * Uses Strategy Pattern to calculate distances between origins and destinations.
+ * Automatically falls back to Haversine if OSRM is unavailable.
+ */
 export async function POST(request: Request) {
   try {
     const { origins, destinations } = await request.json()
@@ -8,55 +15,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing origins or destinations" }, { status: 400 })
     }
 
-    // OSRM expects coordinates in format: longitude,latitude;longitude,latitude;...
-    const coordinates = [
-      ...origins.map((o: { lat: number; lng: number }) => `${o.lng},${o.lat}`),
-      ...destinations.map((d: { lat: number; lng: number }) => `${d.lng},${d.lat}`),
-    ].join(";")
+    // Use Strategy Pattern - DistanceCalculator handles strategy selection and fallback
+    const osrmBaseUrl = process.env.OSRM_BASE_URL || "http://localhost:5000"
+    const calculator = DistanceCalculator.createDefault(osrmBaseUrl)
 
-    const osrmUrl = `https://router.project-osrm.org/table/v1/driving/${coordinates}?annotations=distance,duration`
+    // Calculate distances using the strategy pattern (with automatic fallback)
+    const results = await calculator.calculateDistances(origins, destinations, true)
 
-    console.log("[v0] OSRM URL:", osrmUrl)
-    const response = await fetch(osrmUrl, { signal: AbortSignal.timeout(30000) })
-
-    if (!response.ok) {
-      console.error("[v0] OSRM HTTP error:", response.status, response.statusText)
-      return NextResponse.json({ error: `OSRM API error: ${response.status}` }, { status: 500 })
-    }
-
-    const data = await response.json()
-    console.log("[v0] OSRM Response code:", data.code)
-
-    if (data.code !== "Ok" && data.code !== "ok") {
-      console.error("[v0] OSRM API error:", data)
-      return NextResponse.json(
-        { error: "Failed to calculate distances", details: data.message || data.code },
-        { status: 500 },
-      )
-    }
-
-    if (!data.distances || !Array.isArray(data.distances) || data.distances.length === 0) {
-      console.error("[v0] Invalid OSRM response format - no distances:", data)
-      return NextResponse.json({ error: "Invalid response format from distance service" }, { status: 500 })
-    }
-
-    // Transform OSRM response to match expected format
-    // OSRM returns distances in meters and durations in seconds
-    const distances = data.distances.map((row: number[]) =>
-      row.map((distance: number) => ({
+    // Transform results to match expected API format
+    const distances = results.map((row) =>
+      row.map((result) => ({
         distance: {
-          text: `${(distance / 1000).toFixed(2)} km`,
-          value: distance,
+          text: `${result.distance.toFixed(2)} km`,
+          value: result.distance * 1000, // Convert km to meters for API compatibility
         },
         duration: {
-          text: `${Math.round(distance / 1000 / 50)} mins`, // Rough estimate: 50 km/h average
-          value: Math.round((distance / 1000 / 50) * 60),
+          text: result.duration
+            ? `${Math.round(result.duration / 60)} mins`
+            : `${Math.round(result.distance / 50)} mins`, // Estimate if duration not available
+          value: result.duration || Math.round((result.distance / 50) * 60), // Estimate: 50 km/h average
         },
+        method: result.method, // Include strategy name for debugging
       })),
     )
 
     return NextResponse.json({
-      rows: distances.map((row: any[]) => ({ elements: row })),
+      rows: distances.map((row) => ({ elements: row })),
       status: "OK",
     })
   } catch (error) {

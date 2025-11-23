@@ -313,225 +313,18 @@
 // }
 "use client"
 
-import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MapPin, NavigationIcon, ArrowRight, Loader2, AlertCircle } from "lucide-react"
 import { Map } from "@/components/map"
-
-interface Bus {
-  id: string
-  name: string
-  status: string
-}
-
-interface Stop {
-  id: string
-  name: string
-  latitude: number
-  longitude: number
-}
-
-interface SearchResult {
-  busId: string
-  busName: string
-  stopId: string
-  stopName: string
-  distance: number
-}
-
-interface PlannedRoute {
-  from: Stop
-  to: Stop
-  buses: Bus[]
-}
+import { useRoutePlanner } from "@/hooks/useRoutePlanner"
 
 export default function RoutePlanner() {
-  const [fromLocation, setFromLocation] = useState("")
-  const [toLocation, setToLocation] = useState("")
-  const [fromCoords, setFromCoords] = useState<{ lat: number; lng: number } | null>(null)
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-  const [plannedRoute, setPlannedRoute] = useState<PlannedRoute | null>(null)
-  const [buses, setBuses] = useState<Bus[]>([])
-  const [loading, setLoading] = useState(false)
-  const [mapStops, setMapStops] = useState<Stop[]>([])
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const fetchActiveBuses = async () => {
-      try {
-        const response = await fetch("/api/buses")
-        if (!response.ok) {
-          const text = await response.text()
-          throw new Error(`API error: ${response.status} - ${text}`)
-        }
-        const data = await response.json()
-        setBuses(data.filter((b: Bus) => b.status === "active"))
-      } catch (error) {
-        console.error("[v0] Error fetching buses:", error)
-        setError("Failed to load buses. Please check your Supabase configuration.")
-      }
-    }
-    fetchActiveBuses()
-  }, [])
-
-  const handleGetLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setFromLocation("Current Location")
-          setFromCoords({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-          })
-        },
-        (error) => {
-          console.error("Error getting location:", error)
-          setError("Unable to get your current location")
-        },
-      )
-    }
-  }
-
-  const safeJsonFetch = async (url: string) => {
-    const response = await fetch(url)
-    if (!response.ok) {
-      const text = await response.text()
-      throw new Error(`API error: ${response.status} - ${text}`)
-    }
-    return response.json()
-  }
-
-  const handleSearch = async () => {
-    if (!toLocation) return
-
-    setLoading(true)
-    setError(null)
-    
-    try {
-      // If no coordinates yet, try to fetch them from the fromLocation input
-      let searchCoords = fromCoords
-      
-      if (!searchCoords && fromLocation && fromLocation !== "Current Location") {
-        try {
-          const fromStops = await safeJsonFetch(`/api/stops/search?q=${encodeURIComponent(fromLocation)}`)
-          
-          if (!fromStops || fromStops.length === 0) {
-            setError("Starting location not found. Please use 'Current Location' or enter a valid stop name")
-            setLoading(false)
-            return
-          }
-          
-          // Use the first matching stop's coordinates
-          searchCoords = {
-            lat: fromStops[0].latitude,
-            lng: fromStops[0].longitude,
-          }
-          setFromCoords(searchCoords)
-        } catch (error) {
-          console.error("[v0] Error fetching from location:", error)
-          setError("Could not find starting location. Please try 'Current Location' instead")
-          setLoading(false)
-          return
-        }
-      }
-      
-      // Validate that we have valid coordinates
-      if (!searchCoords || searchCoords.lat === 0 || searchCoords.lng === 0) {
-        setError("Please use 'Current Location' button or enter a valid stop name")
-        setLoading(false)
-        return
-      }
-      // Step 1: Search for destination stop
-      const stops = await safeJsonFetch(`/api/stops/search?q=${encodeURIComponent(toLocation)}`)
-
-      if (!stops || stops.length === 0) {
-        setError("No stops found for that destination")
-        setLoading(false)
-        return
-      }
-
-      const destinationStop = stops[0]
-      setMapStops([destinationStop])
-
-      // Step 2: Get buses serving this destination
-      const servingBuses = await safeJsonFetch(`/api/route-stops/by-stop?stop_id=${destinationStop.id}`)
-
-      if (!servingBuses || servingBuses.length === 0) {
-        setError("No buses serve this destination")
-        setLoading(false)
-        return
-      }
-
-      // Step 3: For each bus, find closest stop to "from" location
-      const results: SearchResult[] = []
-
-      for (const bus of servingBuses) {
-        try {
-          const closestStop = await safeJsonFetch(
-            `/api/route-stops/closest?bus_id=${bus.id}&latitude=${searchCoords.lat}&longitude=${searchCoords.lng}`,
-          )
-
-          if (closestStop && closestStop.id) {
-            results.push({
-              busId: bus.id,
-              busName: bus.name,
-              stopId: closestStop.id,
-              stopName: closestStop.name,
-              distance: closestStop.distance,
-            })
-          }
-        } catch (error) {
-          console.error("[v0] Error finding closest stop for bus:", error)
-        }
-      }
-
-      // Sort by distance
-      results.sort((a, b) => a.distance - b.distance)
-      setSearchResults(results)
-    } catch (error) {
-      console.error("[v0] Error searching routes:", error)
-      setError(`Error searching routes: ${String(error)}`)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-
-  const handleResultClick = async (result: SearchResult) => {
-    // Set the clicked stop as new destination
-    setToLocation(result.stopName)
-
-    // Fetch the stop details to get coordinates
-    try {
-      const stops = await safeJsonFetch(`/api/stops/search?q=${encodeURIComponent(result.stopName)}`)
-      if (stops && stops.length > 0) {
-        const stop = stops[0]
-        setMapStops([stop])
-
-        // Update planned route
-        if (fromCoords) {
-          const bus = buses.find((b) => b.id === result.busId)
-          if (bus) {
-            setPlannedRoute({
-              from: {
-                id: "current",
-                name: fromLocation,
-                latitude: fromCoords.lat,
-                longitude: fromCoords.lng,
-              },
-              to: stop,
-              buses: [bus],
-            })
-          }
-        }
-      }
-    } catch (error) {
-      console.error("[v0] Error handling result click:", error)
-      setError(`Error loading stop details: ${String(error)}`)
-    }
-  }
+  const {
+    state: { fromLocation, toLocation, searchResults, plannedRoute, mapStops, loading, error },
+    actions: { setFromLocation, setToLocation, handleGetLocation, searchRoutes, selectResult },
+  } = useRoutePlanner()
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -594,7 +387,7 @@ export default function RoutePlanner() {
             </div>
           </div>
           <Button
-            onClick={handleSearch}
+            onClick={searchRoutes}
             className="w-full md:w-auto"
             disabled={!fromLocation || !toLocation || loading}
           >
@@ -631,7 +424,7 @@ export default function RoutePlanner() {
               <Card
                 key={index}
                 className="cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => handleResultClick(result)}
+                onClick={() => selectResult(result)}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
