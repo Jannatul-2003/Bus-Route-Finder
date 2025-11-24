@@ -145,6 +145,9 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
   #stopDiscoveryService: StopDiscoveryService | null = null
   #busRouteService: BusRouteService | null = null
   #distanceCalculator: DistanceCalculator | null = null
+  // Performance optimization: Cache for filtered/sorted results
+  // Requirements 6.7: Add memoization for expensive calculations
+  #filterCache: Map<string, EnhancedBusResult[]> = new Map()
 
   constructor() {
     super()
@@ -204,6 +207,18 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
 
   setToLocation(value: string) {
     this.#setState({ toLocation: value })
+  }
+
+  setFromCoords(coords: Coordinates) {
+    this.#setState({ fromCoords: coords })
+  }
+
+  setToCoords(coords: Coordinates) {
+    this.#setState({ toCoords: coords })
+  }
+
+  setError(error: string | null) {
+    this.#setState({ error })
   }
 
   /**
@@ -271,8 +286,11 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
     threshold: number,
     isStarting: boolean
   ): Promise<void> {
+    console.log("[RoutePlannerStore] discoverStopsNearLocation called:", { location, threshold, isStarting })
+    
     // Validate threshold before making the call (Requirements 1.3)
     if (threshold < 100 || threshold > 5000) {
+      console.log("[RoutePlannerStore] Invalid threshold:", threshold)
       this.#setState({ 
         error: "Threshold must be between 100 and 5000 meters" 
       })
@@ -283,23 +301,29 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
 
     try {
       const service = this.#getStopDiscoveryService()
+      console.log("[RoutePlannerStore] StopDiscoveryService obtained, calling discoverStops...")
       
       // Discover stops within threshold (Requirements 2.1, 2.2)
       const discoveredStops = await service.discoverStops(location, threshold)
+      console.log("[RoutePlannerStore] Discovered stops:", discoveredStops.length, discoveredStops)
       
       // Determine if OSRM or Haversine was used
       const distanceMethod = discoveredStops.length > 0 
         ? discoveredStops[0].distanceMethod 
         : 'OSRM'
       
+      console.log("[RoutePlannerStore] Distance method:", distanceMethod)
+      
       // Group stops by starting vs destination (Requirements 2.5)
       if (isStarting) {
+        console.log("[RoutePlannerStore] Setting starting stops:", discoveredStops.length)
         this.#setState({
           startingStops: discoveredStops,
           distanceCalculationMethod: distanceMethod,
           loading: false
         })
       } else {
+        console.log("[RoutePlannerStore] Setting destination stops:", discoveredStops.length)
         this.#setState({
           destinationStops: discoveredStops,
           distanceCalculationMethod: distanceMethod,
@@ -330,40 +354,19 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    * @param stop The stop to select as onboarding point
    */
   async selectOnboardingStop(stop: StopWithDistance): Promise<void> {
+    console.log("[RoutePlannerStore] selectOnboardingStop called:", stop.name, "distance:", stop.distance)
+    
     // Requirement 3.3: Highlight the selection
+    // Requirement 3.4: Use the already-calculated distance from the stop discovery
+    // The stop.distance field already contains the walking distance in meters
     this.#setState({
       selectedOnboardingStop: stop,
-      loading: true,
+      walkingDistanceToOnboarding: stop.distance, // Already in meters
+      loading: false,
       error: null
     })
-
-    // Requirement 3.4: Calculate walking distance from starting location to onboarding stop
-    if (this.#state.fromCoords) {
-      try {
-        const distanceCalculator = this.#getDistanceCalculator()
-
-        const distanceResults = await distanceCalculator.calculateDistances(
-          [this.#state.fromCoords],
-          [{ lat: stop.latitude, lng: stop.longitude }]
-        )
-
-        // Extract distance in meters (convert from km)
-        const walkingDistance = distanceResults[0][0].distance * 1000
-
-        this.#setState({
-          walkingDistanceToOnboarding: walkingDistance,
-          loading: false
-        })
-      } catch (error) {
-        console.error("[RoutePlannerStore] Error calculating walking distance to onboarding:", error)
-        this.#setState({
-          loading: false,
-          error: `Failed to calculate walking distance: ${error instanceof Error ? error.message : String(error)}`
-        })
-      }
-    } else {
-      this.#setState({ loading: false })
-    }
+    
+    console.log("[RoutePlannerStore] Onboarding stop selected, walking distance:", stop.distance, "meters")
   }
 
   /**
@@ -374,43 +377,22 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    * @param stop The stop to select as offboarding point
    */
   async selectOffboardingStop(stop: StopWithDistance): Promise<void> {
+    console.log("[RoutePlannerStore] selectOffboardingStop called:", stop.name, "distance:", stop.distance)
+    
     // Highlight the selection
+    // Requirement 3.5: Use the already-calculated distance from the stop discovery
+    // The stop.distance field already contains the walking distance in meters
     this.#setState({
       selectedOffboardingStop: stop,
-      loading: true,
+      walkingDistanceFromOffboarding: stop.distance, // Already in meters
+      loading: false,
       error: null
     })
-
-    // Requirement 3.5: Calculate walking distance from offboarding stop to destination location
-    if (this.#state.toCoords) {
-      try {
-        const distanceCalculator = this.#getDistanceCalculator()
-
-        const distanceResults = await distanceCalculator.calculateDistances(
-          [{ lat: stop.latitude, lng: stop.longitude }],
-          [this.#state.toCoords]
-        )
-
-        // Extract distance in meters (convert from km)
-        const walkingDistance = distanceResults[0][0].distance * 1000
-
-        this.#setState({
-          walkingDistanceFromOffboarding: walkingDistance,
-          loading: false
-        })
-
-        // Requirement 3.6: Both stops are now selected, bus route search can be enabled
-        // The UI can check if both selectedOnboardingStop and selectedOffboardingStop are non-null
-      } catch (error) {
-        console.error("[RoutePlannerStore] Error calculating walking distance from offboarding:", error)
-        this.#setState({
-          loading: false,
-          error: `Failed to calculate walking distance: ${error instanceof Error ? error.message : String(error)}`
-        })
-      }
-    } else {
-      this.#setState({ loading: false })
-    }
+    
+    console.log("[RoutePlannerStore] Offboarding stop selected, walking distance:", stop.distance, "meters")
+    
+    // Requirement 3.6: Both stops are now selected, bus route search can be enabled
+    // The UI can check if both selectedOnboardingStop and selectedOffboardingStop are non-null
   }
 
   /**
@@ -426,8 +408,15 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    * 4. Apply filters and sorting
    */
   async searchBusesForRoute(): Promise<void> {
+    console.log("[RoutePlannerStore] searchBusesForRoute called")
+    console.log("[RoutePlannerStore] Selected stops:", {
+      onboarding: this.#state.selectedOnboardingStop?.name,
+      offboarding: this.#state.selectedOffboardingStop?.name
+    })
+    
     // Validate that both stops are selected
     if (!this.#state.selectedOnboardingStop || !this.#state.selectedOffboardingStop) {
+      console.log("[RoutePlannerStore] Missing stop selection")
       this.#setState({
         error: "Please select both onboarding and offboarding stops"
       })
@@ -435,8 +424,14 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
     }
 
     // Validate that walking distances are calculated
+    console.log("[RoutePlannerStore] Walking distances:", {
+      toOnboarding: this.#state.walkingDistanceToOnboarding,
+      fromOffboarding: this.#state.walkingDistanceFromOffboarding
+    })
+    
     if (this.#state.walkingDistanceToOnboarding === null || 
         this.#state.walkingDistanceFromOffboarding === null) {
+      console.log("[RoutePlannerStore] Walking distances not calculated")
       this.#setState({
         error: "Walking distances not calculated. Please reselect stops."
       })
@@ -447,12 +442,15 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
 
     try {
       const busRouteService = this.#getBusRouteService()
+      console.log("[RoutePlannerStore] BusRouteService obtained, finding bus routes...")
       
       // Find buses that serve both stops (Requirements 4.1, 4.2)
       const busRoutes = await busRouteService.findBusRoutes(
         this.#state.selectedOnboardingStop.id,
         this.#state.selectedOffboardingStop.id
       )
+      
+      console.log("[RoutePlannerStore] Found bus routes:", busRoutes.length)
 
       // Requirement 4.3: Handle no buses found
       if (busRoutes.length === 0) {
@@ -544,11 +542,27 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    * Apply filters and sorting to bus results
    * Requirements 6.2, 6.3, 6.4, 6.5: Apply filters
    * Requirements 6.7: Apply sorting
+   * Performance: Memoized to avoid redundant calculations
    * 
    * @param buses Array of enhanced bus results
    * @returns Filtered and sorted array of bus results
    */
   #applyFiltersAndSort(buses: EnhancedBusResult[]): EnhancedBusResult[] {
+    // Create cache key based on filter and sort state
+    const cacheKey = `filtered_buses_${JSON.stringify({
+      isAC: this.#state.filters.isAC,
+      coachTypes: this.#state.filters.coachTypes,
+      sortBy: this.#state.sortBy,
+      sortOrder: this.#state.sortOrder,
+      busIds: buses.map(b => b.id).join(',')
+    })}`
+
+    // Check cache first (Requirements 6.7: Optimize filter performance)
+    const cached = this.#filterCache.get(cacheKey)
+    if (cached) {
+      return cached
+    }
+
     // Build filter using BusFilterBuilder
     const filterBuilder = new BusFilterBuilder()
 
@@ -567,6 +581,9 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
 
     // Apply sorting (Requirement 6.7)
     filtered = this.#sortBuses(filtered)
+
+    // Cache the result
+    this.#filterCache.set(cacheKey, filtered)
 
     return filtered
   }
@@ -610,6 +627,9 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    * @param isAC true for AC only, false for non-AC only, null for no filter
    */
   setACFilter(isAC: boolean | null): void {
+    // Clear filter cache when filters change
+    this.#filterCache.clear()
+    
     this.#setState({
       filters: {
         ...this.#state.filters,
@@ -631,6 +651,9 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    * @param coachTypes Array of coach types to include
    */
   setCoachTypeFilter(coachTypes: ('standard' | 'express' | 'luxury')[]): void {
+    // Clear filter cache when filters change
+    this.#filterCache.clear()
+    
     this.#setState({
       filters: {
         ...this.#state.filters,
@@ -652,6 +675,9 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    * @param sortBy The field to sort by
    */
   setSortBy(sortBy: 'journeyLength' | 'estimatedTime' | 'name'): void {
+    // Clear filter cache when sort changes
+    this.#filterCache.clear()
+    
     this.#setState({ sortBy })
 
     // Re-apply sorting to original unfiltered results
@@ -668,6 +694,9 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    * @param sortOrder 'asc' for ascending, 'desc' for descending
    */
   setSortOrder(sortOrder: 'asc' | 'desc'): void {
+    // Clear filter cache when sort order changes
+    this.#filterCache.clear()
+    
     this.#setState({ sortOrder })
 
     // Re-apply sorting to original unfiltered results

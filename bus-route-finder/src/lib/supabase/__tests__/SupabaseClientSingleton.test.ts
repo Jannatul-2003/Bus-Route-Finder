@@ -11,12 +11,15 @@ vi.mock('@supabase/ssr', () => ({
 }))
 
 describe('SupabaseClientSingleton - Singleton Pattern Implementation', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Reset singleton instance before each test
     SupabaseClientSingleton.resetInstance()
     // Set up environment variables
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
+    // Clear mock calls
+    const { createBrowserClient } = await import('@supabase/ssr')
+    vi.mocked(createBrowserClient).mockClear()
   })
 
   describe('Singleton Pattern Core Principles', () => {
@@ -178,7 +181,7 @@ describe('SupabaseClientSingleton - Singleton Pattern Implementation', () => {
   })
 
   describe('Resource Efficiency', () => {
-    it('JUSTIFICATION: Should create client only once, even with multiple calls', () => {
+    it('JUSTIFICATION: Should create client only once, even with multiple calls', async () => {
       const { createBrowserClient } = await import('@supabase/ssr')
       const createSpy = vi.mocked(createBrowserClient)
 

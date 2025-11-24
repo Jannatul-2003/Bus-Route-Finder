@@ -1,9 +1,18 @@
 import * as React from "react"
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
 import { ThresholdInput } from "../ThresholdInput"
 
 describe("ThresholdInput", () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
+
   it("renders with label and default value", () => {
     const onChange = vi.fn()
     render(
@@ -58,6 +67,9 @@ describe("ThresholdInput", () => {
 
     const input = screen.getByLabelText("Test Threshold")
     fireEvent.change(input, { target: { value: "1000" } })
+
+    // Wait for debounce (300ms)
+    vi.advanceTimersByTime(300)
 
     expect(onChange).toHaveBeenCalledWith(1000)
     expect(screen.queryByRole("alert")).toBeNull()
@@ -142,8 +154,8 @@ describe("ThresholdInput", () => {
 
     expect(onChange).toHaveBeenCalledWith(null)
 
-    // Input should be disabled
-    const input = screen.getByLabelText("Destination") as HTMLInputElement
+    // Input should be disabled - use the input element directly
+    const input = screen.getByRole("textbox") as HTMLInputElement
     expect(input.disabled).toBe(true)
   })
 

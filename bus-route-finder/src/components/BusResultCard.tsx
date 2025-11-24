@@ -93,18 +93,18 @@ export function BusResultCard({
   return (
     <div
       className={cn(
-        "group relative rounded-lg border bg-card p-4 shadow-sm transition-all duration-200",
+        "group relative rounded-lg border bg-card p-3 sm:p-4 shadow-sm transition-all duration-200",
         "hover:shadow-md hover:border-primary/30",
         className
       )}
     >
       {/* Header: Bus name and badges */}
-      <div className="flex items-start justify-between gap-3 mb-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-lg leading-tight text-foreground mb-2">
+          <h3 className="font-semibold text-base sm:text-lg leading-tight text-foreground mb-1.5 sm:mb-2">
             {bus.name}
           </h3>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <Badge
               variant="outline"
               className={cn("font-medium", acBadgeStyle)}
@@ -176,9 +176,9 @@ export function BusResultCard({
 
         {/* Journey length prominently displayed */}
         <div className="flex flex-col items-end shrink-0">
-          <div className="flex items-center gap-1.5 text-primary font-bold text-xl">
+          <div className="flex items-center gap-1 sm:gap-1.5 text-primary font-bold text-lg sm:text-xl">
             <svg
-              className="size-5"
+              className="size-4 sm:size-5"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -195,15 +195,15 @@ export function BusResultCard({
               {formatDistance(bus.journeyLength * 1000)}
             </span>
           </div>
-          <span className="text-xs text-muted-foreground mt-0.5">
+          <span className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
             journey
           </span>
         </div>
       </div>
 
       {/* Route visualization */}
-      <div className="mb-3 py-3 px-3 bg-muted/30 rounded-md">
-        <div className="flex items-center gap-2 text-sm">
+      <div className="mb-2 sm:mb-3 py-2 sm:py-3 px-2 sm:px-3 bg-muted/30 rounded-md">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
           <span className="font-medium text-foreground shrink-0">
             {bus.onboardingStop.name}
           </span>
@@ -232,9 +232,9 @@ export function BusResultCard({
       </div>
 
       {/* Walking distances and time estimate */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-2 sm:mb-3">
         {/* Walking to onboarding */}
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
           <svg
             className="size-4 text-muted-foreground shrink-0"
             fill="none"
@@ -256,7 +256,7 @@ export function BusResultCard({
         </div>
 
         {/* Bus ride */}
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
           <svg
             className="size-4 text-muted-foreground shrink-0"
             fill="none"
@@ -278,7 +278,7 @@ export function BusResultCard({
         </div>
 
         {/* Walking from offboarding */}
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
           <svg
             className="size-4 text-muted-foreground shrink-0"
             fill="none"
@@ -301,8 +301,8 @@ export function BusResultCard({
       </div>
 
       {/* Estimated time */}
-      <div className="flex items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-2 text-sm">
+      <div className="flex items-center justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
+        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
           <svg
             className="size-4 text-muted-foreground"
             fill="none"
@@ -330,7 +330,7 @@ export function BusResultCard({
           onClick={toggleExpanded}
           aria-expanded={isExpanded}
           aria-label={isExpanded ? "Hide details" : "Show details"}
-          className="text-xs"
+          className="text-xs min-h-[44px] sm:min-h-auto"
         >
           {isExpanded ? (
             <>
@@ -416,10 +416,10 @@ export function BusResultCard({
 
       {/* Select button (if onSelect provided) */}
       {onSelect && (
-        <div className="mt-3 pt-3 border-t">
+        <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t">
           <Button
             onClick={handleSelect}
-            className="w-full"
+            className="w-full min-h-[48px]"
             aria-label={`Select ${bus.name} route`}
           >
             Select Route

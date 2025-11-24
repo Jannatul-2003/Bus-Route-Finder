@@ -18,7 +18,14 @@ export class Observable<T> {
   }
 
   protected notify(state: T) {
-    this.#observers.forEach((observer) => observer.update(state))
+    this.#observers.forEach((observer) => {
+      try {
+        observer.update(state)
+      } catch (error) {
+        // Log error but continue notifying other observers
+        console.error('[Observable] Observer update failed:', error)
+      }
+    })
   }
 }
 

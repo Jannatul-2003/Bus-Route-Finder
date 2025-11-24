@@ -88,7 +88,7 @@ export function FilterControls({
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 p-4 rounded-lg border bg-card shadow-sm",
+        "flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 rounded-lg border bg-card shadow-sm filter-controls",
         className
       )}
       role="group"
@@ -99,7 +99,7 @@ export function FilterControls({
         <label className="text-sm font-medium text-foreground">
           Air Conditioning
         </label>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="AC filter">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-2" role="group" aria-label="AC filter">
           <Button
             variant={acFilter === true ? "default" : "outline"}
             size="sm"
@@ -107,7 +107,7 @@ export function FilterControls({
             aria-pressed={acFilter === true}
             aria-label="Filter by air conditioned buses"
             className={cn(
-              "transition-all duration-200",
+              "transition-all duration-200 min-h-[44px] sm:min-h-auto w-full sm:w-auto justify-center",
               acFilter === true && "shadow-md"
             )}
           >
@@ -134,7 +134,7 @@ export function FilterControls({
             aria-pressed={acFilter === false}
             aria-label="Filter by non air conditioned buses"
             className={cn(
-              "transition-all duration-200",
+              "transition-all duration-200 min-h-[44px] sm:min-h-auto w-full sm:w-auto justify-center",
               acFilter === false && "shadow-md"
             )}
           >
@@ -149,7 +149,7 @@ export function FilterControls({
           Coach Type
         </label>
         <div
-          className="flex flex-wrap gap-2"
+          className="flex flex-col sm:flex-row flex-wrap gap-2"
           role="group"
           aria-label="Coach type filter"
         >
@@ -162,7 +162,7 @@ export function FilterControls({
             aria-pressed={coachTypeFilter.includes("standard")}
             aria-label="Filter by standard coach"
             className={cn(
-              "transition-all duration-200",
+              "transition-all duration-200 min-h-[44px] sm:min-h-auto w-full sm:w-auto justify-center",
               coachTypeFilter.includes("standard") && "shadow-md"
             )}
           >
@@ -177,7 +177,7 @@ export function FilterControls({
             aria-pressed={coachTypeFilter.includes("express")}
             aria-label="Filter by express coach"
             className={cn(
-              "transition-all duration-200",
+              "transition-all duration-200 min-h-[44px] sm:min-h-auto w-full sm:w-auto justify-center",
               coachTypeFilter.includes("express") && "shadow-md"
             )}
           >
@@ -206,7 +206,7 @@ export function FilterControls({
             aria-pressed={coachTypeFilter.includes("luxury")}
             aria-label="Filter by luxury coach"
             className={cn(
-              "transition-all duration-200",
+              "transition-all duration-200 min-h-[44px] sm:min-h-auto w-full sm:w-auto justify-center",
               coachTypeFilter.includes("luxury") && "shadow-md"
             )}
           >
@@ -234,11 +234,11 @@ export function FilterControls({
         <label className="text-sm font-medium text-foreground">
           Sort By
         </label>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
           <Select value={sortBy} onValueChange={onSortByChange}>
             <SelectTrigger
               aria-label="Select sort criteria"
-              className="w-[180px]"
+              className="w-full sm:w-[180px] min-h-[44px]"
             >
               <SelectValue />
             </SelectTrigger>
@@ -255,7 +255,7 @@ export function FilterControls({
             onClick={handleSortOrderToggle}
             aria-label={`Sort order: ${sortOrder === "asc" ? "ascending" : "descending"}`}
             aria-pressed={sortOrder === "desc"}
-            className="transition-all duration-200"
+            className="transition-all duration-200 min-h-[44px] w-full sm:w-auto justify-center"
           >
             {sortOrder === "asc" ? (
               <>

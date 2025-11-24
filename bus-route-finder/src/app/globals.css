@@ -258,3 +258,256 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Accessibility Enhancements */
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Enhanced focus indicators for accessibility - WCAG AA compliant */
+*:focus-visible {
+  outline: 2px solid var(--ring) !important;
+  outline-offset: 2px !important;
+}
+
+/* Ensure sufficient color contrast for focus states */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible,
+[role="radio"]:focus-visible,
+[role="checkbox"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--ring) !important;
+  outline-offset: 2px !important;
+}
+
+/* Skip to main content link */
+.skip-to-main {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  padding: 8px 16px;
+  text-decoration: none;
+  z-index: 100;
+  border-radius: 0 0 4px 0;
+}
+
+.skip-to-main:focus {
+  top: 0;
+}
+
+/* Ensure minimum touch target size for mobile (44x44px WCAG guideline) */
+@media (pointer: coarse) {
+  button,
+  a,
+  input[type="checkbox"],
+  input[type="radio"],
+  [role="button"],
+  [role="radio"],
+  [role="checkbox"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Mobile-first responsive design enhancements */
+
+/* Smooth scrolling for better mobile experience */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Optimize text rendering on mobile */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Mobile-specific container padding */
+@media (max-width: 640px) {
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Prevent horizontal scroll on mobile */
+body {
+  overflow-x: hidden;
+}
+
+/* Touch-friendly spacing for mobile */
+@media (max-width: 768px) {
+  /* Increase tap target sizes */
+  button:not(.btn-icon-only) {
+    min-height: 48px;
+    padding: 0.75rem 1.5rem;
+  }
+  
+  /* Optimize input fields for mobile */
+  input,
+  textarea,
+  select {
+    font-size: 16px; /* Prevents zoom on iOS */
+    min-height: 48px;
+  }
+  
+  /* Better spacing for cards on mobile */
+  .space-y-6 > * + * {
+    margin-top: 1rem;
+  }
+  
+  .space-y-4 > * + * {
+    margin-top: 0.75rem;
+  }
+}
+
+/* Optimize map for mobile devices */
+@media (max-width: 768px) {
+  .leaflet-container {
+    height: 300px !important;
+    touch-action: pan-x pan-y;
+  }
+  
+  /* Larger touch targets for map controls */
+  .leaflet-control-zoom a {
+    width: 44px !important;
+    height: 44px !important;
+    line-height: 44px !important;
+    font-size: 24px !important;
+  }
+  
+  /* Better popup positioning on mobile */
+  .leaflet-popup-content-wrapper {
+    max-width: 200px;
+  }
+}
+
+/* Swipe gesture support for map */
+.leaflet-container {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Responsive grid improvements */
+@media (max-width: 1024px) {
+  .lg\:grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Optimize sticky positioning on mobile */
+@media (max-width: 1024px) {
+  .sticky {
+    position: relative !important;
+    top: auto !important;
+  }
+}
+
+/* Better card layouts on mobile */
+@media (max-width: 640px) {
+  .grid.grid-cols-1.md\:grid-cols-2 {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .grid.grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+  
+  .sm\:grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Optimize header for mobile */
+@media (max-width: 640px) {
+  h1 {
+    font-size: 1.5rem;
+    line-height: 2rem;
+  }
+  
+  h2 {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+  }
+  
+  h3 {
+    font-size: 1.125rem;
+    line-height: 1.5rem;
+  }
+}
+
+/* Better button layouts on mobile */
+@media (max-width: 640px) {
+  .flex.flex-wrap.gap-2 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .flex.flex-wrap.gap-2 > button {
+    width: 100%;
+  }
+}
+
+/* Optimize modal/dialog for mobile */
+@media (max-width: 640px) {
+  [role="dialog"] {
+    max-width: calc(100vw - 2rem);
+    margin: 1rem;
+  }
+}
+
+/* Better scrollable areas on mobile */
+@media (max-width: 768px) {
+  .max-h-96 {
+    max-height: 60vh;
+  }
+  
+  .overflow-y-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Optimize badge sizes for mobile */
+@media (max-width: 640px) {
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+/* Better spacing for filter controls on mobile */
+@media (max-width: 640px) {
+  .filter-controls {
+    padding: 0.75rem;
+  }
+  
+  .filter-controls .flex.flex-wrap {
+    flex-direction: column;
+  }
+  
+  .filter-controls button {
+    width: 100%;
+    justify-content: center;
+  }
+}

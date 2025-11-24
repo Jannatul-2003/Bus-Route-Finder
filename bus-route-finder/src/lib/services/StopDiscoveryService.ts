@@ -1,14 +1,22 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { DistanceCalculator } from '../strategies/DistanceCalculator'
 import type { Stop, StopWithDistance, Coordinates } from '../types/database'
+import { cache } from '../utils/cache'
 
 /**
  * Service for discovering bus stops within threshold distances
  * 
  * This service uses the Strategy pattern (via DistanceCalculator) to calculate
  * distances to stops using OSRM with Haversine fallback.
+ * 
+ * Performance Optimizations:
+ * - Caches all stops data to reduce database queries (5 minute TTL)
+ * - Requirements 2.1, 2.2: Optimize stop discovery performance
  */
 export class StopDiscoveryService {
+  private static readonly STOPS_CACHE_KEY = 'all_stops'
+  private static readonly STOPS_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
   constructor(
     private distanceCalculator: DistanceCalculator,
     private supabaseClient: SupabaseClient
@@ -25,14 +33,18 @@ export class StopDiscoveryService {
     location: Coordinates,
     thresholdMeters: number
   ): Promise<StopWithDistance[]> {
+    console.log("[StopDiscoveryService] discoverStops called:", { location, thresholdMeters })
+    
     // 1. Fetch all stops from Supabase
     const allStops = await this.fetchAllStops()
+    console.log("[StopDiscoveryService] Fetched all stops:", allStops.length)
     
     // 2. Calculate distances using DistanceCalculator (OSRM with Haversine fallback)
     const distances = await this.distanceCalculator.calculateDistances(
       [location],
       allStops.map(s => ({ lat: s.latitude, lng: s.longitude }))
     )
+    console.log("[StopDiscoveryService] Calculated distances:", distances.length)
     
     // 3. Map stops with their distances and filter by threshold
     const stopsWithDistances: StopWithDistance[] = allStops
@@ -44,17 +56,26 @@ export class StopDiscoveryService {
       .filter(stop => stop.distance <= thresholdMeters)
       .sort((a, b) => a.distance - b.distance)
     
+    console.log("[StopDiscoveryService] Stops within threshold:", stopsWithDistances.length)
+    
     return stopsWithDistances
   }
   
   /**
-   * Fetch all stops from Supabase with retry logic
+   * Fetch all stops from Supabase with retry logic and caching
    * Requirements 8.4: Retry logic for database connection failures (3 attempts)
+   * Performance: Cache stops data to reduce database queries
    * 
    * @returns Promise resolving to array of all stops
    * @throws Error if database query fails after all retries
    */
   async fetchAllStops(): Promise<Stop[]> {
+    // Check cache first
+    const cachedStops = cache.get<Stop[]>(StopDiscoveryService.STOPS_CACHE_KEY)
+    if (cachedStops) {
+      return cachedStops
+    }
+
     const maxRetries = 3
     let lastError: Error | null = null
 
@@ -68,7 +89,12 @@ export class StopDiscoveryService {
           throw new Error(`Failed to fetch stops: ${error.message}`)
         }
         
-        return data as Stop[]
+        const stops = data as Stop[]
+        
+        // Cache the result
+        cache.set(StopDiscoveryService.STOPS_CACHE_KEY, stops, StopDiscoveryService.STOPS_CACHE_TTL)
+        
+        return stops
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error))
         

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
+import { renderHook, waitFor, act } from '@testing-library/react'
 import { useRoutePlanner } from '../useRoutePlanner'
 import { routePlannerStore } from '@/lib/stores/routePlannerStore'
 import type { Observer } from '@/lib/observer'
@@ -77,7 +77,9 @@ describe('useRoutePlanner - React Hook Integration with Observer Pattern', () =>
         fromLocation: 'Updated Location',
       }
 
-      subscribedObserver.update(newState)
+      act(() => {
+        subscribedObserver.update(newState)
+      })
 
       expect(result.current.state.fromLocation).toBe('Updated Location')
     })
@@ -180,7 +182,9 @@ describe('useRoutePlanner - React Hook Integration with Observer Pattern', () =>
         fromLocation: 'Observer Test',
       }
 
-      observer.update(newState)
+      act(() => {
+        observer.update(newState)
+      })
 
       // React state updated through observer pattern
       expect(result.current.state.fromLocation).toBe('Observer Test')

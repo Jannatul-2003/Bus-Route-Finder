@@ -68,6 +68,10 @@ describe('StopDiscoveryService', () => {
     })
 
     it('should throw error when Supabase query fails', async () => {
+      // Clear cache to ensure test isolation
+      const { cache } = await import('../../utils/cache')
+      cache.clear()
+      
       const errorMessage = 'Database connection failed'
       mockSupabaseClient = {
         from: vi.fn(() => ({

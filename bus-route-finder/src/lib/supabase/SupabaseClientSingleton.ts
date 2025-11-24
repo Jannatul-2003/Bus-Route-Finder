@@ -71,6 +71,10 @@ class SupabaseClientSingleton {
    * This method allows resetting the singleton in test environments
    */
   public static resetInstance(): void {
+    if (SupabaseClientSingleton.instance) {
+      SupabaseClientSingleton.instance.client = null
+      SupabaseClientSingleton.instance.isInitialized = false
+    }
     SupabaseClientSingleton.instance = null
   }
 

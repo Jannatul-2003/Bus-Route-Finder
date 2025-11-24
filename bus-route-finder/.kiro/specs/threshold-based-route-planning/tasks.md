@@ -224,7 +224,7 @@
   - Implement sort functionality
   - _Requirements: 4.4, 4.5, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
 
-- [-] 18. Enhance map visualization
+- [x] 18. Enhance map visualization
   - Display all discovered stops as markers on map
   - Highlight selected onboarding stop with distinct marker (green)
   - Highlight selected offboarding stop with distinct marker (red)
@@ -240,7 +240,7 @@
   - **Property 21: Map Marker Display**
   - **Validates: Requirements 10.2, 10.3**
 
-- [ ]* 18.2 Write property test for complete route visualization
+- [x]* 18.2 Write property test for complete route visualization
   - **Property 22: Complete Route Visualization**
   - **Validates: Requirements 10.4, 10.5**
 
@@ -267,7 +267,7 @@
   - Add request logging
   - _Requirements: 2.1, 2.2, 4.1, 5.1_
 
-- [ ] 21. Add accessibility features
+- [x] 21. Add accessibility features
   - Add ARIA labels to all interactive elements
   - Implement keyboard navigation for stop selection
   - Add focus indicators for all focusable elements
@@ -276,7 +276,7 @@
   - Test with keyboard-only navigation
   - _Requirements: 3.2, 3.3, 6.1_
 
-- [ ] 22. Optimize performance
+- [x] 22. Optimize performance
   - Implement debouncing for threshold input changes (300ms)
   - Add memoization for expensive calculations (journey length, filtering)
   - Virtualize long stop lists (react-window)
@@ -285,10 +285,10 @@
   - Add caching for frequently accessed data
   - _Requirements: 2.1, 2.2, 5.1, 6.7_
 
-- [ ] 23. Checkpoint - Ensure all tests pass
+- [x] 23. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 24. Add responsive design and mobile optimization
+- [x] 24. Add responsive design and mobile optimization
   - Implement mobile-first responsive breakpoints
   - Stack columns vertically on mobile
   - Optimize touch targets for mobile (min 44x44px)
@@ -297,7 +297,7 @@
   - Test on various screen sizes (320px to 1920px)
   - _Requirements: 1.1, 2.5, 3.1_
 
-- [ ] 25. Create documentation and examples
+- [x] 25. Create documentation and examples
   - Document BusFilterBuilder usage with examples
   - Document Decorator pattern implementation
   - Add JSDoc comments to all public methods
@@ -306,5 +306,5 @@
   - Add example seed data for testing
   - _Requirements: All_
 
-- [ ] 26. Final checkpoint - Ensure all tests pass
+- [x] 26. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.

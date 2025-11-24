@@ -29,8 +29,15 @@ export interface RouteStopWithDetails extends RouteStop {
  * 
  * This service handles querying buses that serve specific stops,
  * calculating journey lengths, and validating route ordering.
+ * 
+ * Performance optimization: Memoizes journey length calculations
+ * Requirements 5.1, 6.7: Add memoization for expensive calculations
  */
 export class BusRouteService {
+  // Cache for journey length calculations
+  // Key format: "busId-onboardingOrder-offboardingOrder-direction"
+  private journeyLengthCache: Map<string, number> = new Map()
+
   constructor(
     private supabaseClient: SupabaseClient,
     private distanceCalculator: DistanceCalculator
@@ -65,24 +72,19 @@ export class BusRouteService {
             direction,
             distance_to_next,
             duration_to_next,
-            created_at,
-            updated_at,
             buses (
               id,
               name,
               status,
               is_ac,
-              coach_type,
-              created_at,
-              updated_at
+              coach_type
             ),
             stops (
               id,
               name,
               latitude,
               longitude,
-              accessible,
-              created_at
+              accessible
             )
           `)
           .in('stop_id', [onboardingStopId, offboardingStopId])
@@ -129,6 +131,7 @@ export class BusRouteService {
    * Calculate journey length from pre-calculated segment distances
    * Requirements 5.4: Handle missing distance_to_next with OSRM calculation and warning log
    * Requirements 8.4: Retry logic for database connection failures
+   * Requirements 5.1, 6.7: Memoization for expensive calculations
    * 
    * @param busId The bus ID
    * @param onboardingStopOrder The stop order of onboarding stop
@@ -143,6 +146,13 @@ export class BusRouteService {
     offboardingStopOrder: number,
     direction: 'outbound' | 'inbound'
   ): Promise<number> {
+    // Check cache first (Requirements 5.1, 6.7: Memoization)
+    const cacheKey = `${busId}-${onboardingStopOrder}-${offboardingStopOrder}-${direction}`
+    const cached = this.journeyLengthCache.get(cacheKey)
+    if (cached !== undefined) {
+      return cached
+    }
+
     const maxRetries = 3
     let lastError: Error | null = null
 
@@ -259,7 +269,18 @@ export class BusRouteService {
       )
     }
     
+    // Cache the result (Requirements 5.1, 6.7: Memoization)
+    this.journeyLengthCache.set(cacheKey, totalDistance)
+    
     return totalDistance
+  }
+
+  /**
+   * Clear the journey length cache
+   * Useful when route data is updated
+   */
+  clearJourneyLengthCache(): void {
+    this.journeyLengthCache.clear()
   }
 
   /**

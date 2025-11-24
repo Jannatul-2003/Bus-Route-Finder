@@ -195,6 +195,9 @@ describe('SupabaseServerSingleton - Singleton Pattern Implementation', () => {
     it('JUSTIFICATION: Should create client only once for same context', async () => {
       const { createServerClient } = await import('@supabase/ssr')
       const createSpy = vi.mocked(createServerClient)
+      
+      // Clear previous calls from beforeEach and other tests
+      createSpy.mockClear()
 
       const singleton = SupabaseServerSingleton.getInstance()
 

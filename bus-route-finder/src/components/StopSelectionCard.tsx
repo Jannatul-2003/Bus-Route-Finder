@@ -70,9 +70,10 @@ export function StopSelectionCard({
       onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={cn(
-        "group relative flex items-center gap-3 rounded-lg border p-4 cursor-pointer transition-all duration-200",
+        "group relative flex items-center gap-2 sm:gap-3 rounded-lg border p-3 sm:p-4 cursor-pointer transition-all duration-200",
         "hover:border-primary/50 hover:shadow-md hover:scale-[1.02]",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        "min-h-[56px] touch-manipulation",
         isSelected &&
           "border-primary bg-primary/5 shadow-sm dark:bg-primary/10",
         !isSelected && "bg-card hover:bg-accent/50",
@@ -112,14 +113,14 @@ export function StopSelectionCard({
       <div className="flex-1 min-w-0">
         <h3
           className={cn(
-            "font-medium text-sm leading-tight transition-colors duration-200",
+            "font-medium text-sm sm:text-base leading-tight transition-colors duration-200",
             isSelected ? "text-foreground" : "text-foreground/90"
           )}
         >
           {stop.name}
         </h3>
         {stop.accessible && (
-          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 flex items-center gap-1">
             <svg
               className="size-3"
               fill="none"

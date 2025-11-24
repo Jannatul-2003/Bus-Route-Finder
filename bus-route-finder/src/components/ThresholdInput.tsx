@@ -1,6 +1,7 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
+import { debounce } from "@/lib/utils/debounce"
 
 interface ThresholdInputProps {
   value: number | null
@@ -13,6 +14,7 @@ interface ThresholdInputProps {
 
 const MIN_THRESHOLD = 100
 const MAX_THRESHOLD = 5000
+const DEBOUNCE_DELAY = 300 // 300ms debounce for performance optimization
 
 export function ThresholdInput({
   value,
@@ -27,6 +29,13 @@ export function ThresholdInput({
   )
   const [noThreshold, setNoThreshold] = React.useState<boolean>(value === null)
   const [internalError, setInternalError] = React.useState<string>("")
+
+  // Debounced onChange handler for performance optimization
+  // Requirements 2.1, 2.2: Debounce threshold input changes (300ms)
+  const debouncedOnChange = React.useMemo(
+    () => debounce(onChange, DEBOUNCE_DELAY),
+    [onChange]
+  )
 
   // Sync external value changes
   React.useEffect(() => {
@@ -83,7 +92,8 @@ export function ThresholdInput({
 
     if (!error) {
       const numValue = Number(newValue)
-      onChange(numValue)
+      // Use debounced onChange to reduce API calls
+      debouncedOnChange(numValue)
     }
   }
 
@@ -122,8 +132,9 @@ export function ThresholdInput({
   const isInvalid = !!displayError && inputValue !== ""
 
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
+    <div className={cn("flex flex-col gap-2 sm:gap-3", className)} role="group" aria-labelledby={`threshold-${label}-label`}>
       <label
+        id={`threshold-${label}-label`}
         htmlFor={`threshold-${label}`}
         className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
       >
@@ -146,7 +157,7 @@ export function ThresholdInput({
               displayError ? `threshold-${label}-error` : undefined
             }
             className={cn(
-              "pr-12 transition-all duration-200",
+              "pr-12 transition-all duration-200 min-h-[48px] text-base",
               isValid &&
                 !noThreshold &&
                 "border-green-500 focus-visible:border-green-500 focus-visible:ring-green-500/50",
@@ -204,6 +215,7 @@ export function ThresholdInput({
 
         {allowNoThreshold && (
           <label
+            htmlFor={`no-threshold-${label}`}
             className={cn(
               "flex items-center gap-2 cursor-pointer group transition-opacity duration-200",
               noThreshold && "opacity-100"
@@ -211,11 +223,14 @@ export function ThresholdInput({
           >
             <input
               type="checkbox"
+              id={`no-threshold-${label}`}
               checked={noThreshold}
               onChange={(e) => handleNoThresholdChange(e.target.checked)}
+              aria-label={`No threshold for ${label}`}
               className={cn(
                 "size-4 rounded border-input text-primary transition-all duration-200",
                 "focus:ring-2 focus:ring-ring focus:ring-offset-2",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                 "cursor-pointer accent-primary"
               )}
             />

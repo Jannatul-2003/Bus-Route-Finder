@@ -37,27 +37,43 @@ describe('Map Component - Property 22: Complete Route Visualization', () => {
         // Generate random coordinates within Dhaka bounds
         fc.record({
           startingLocation: fc.record({
-            lat: fc.double({ min: 23.7, max: 23.9 }),
-            lng: fc.double({ min: 90.3, max: 90.5 })
+            lat: fc.double({ min: 23.7, max: 23.9, noNaN: true }),
+            lng: fc.double({ min: 90.3, max: 90.5, noNaN: true })
           }),
           destinationLocation: fc.record({
-            lat: fc.double({ min: 23.7, max: 23.9 }),
-            lng: fc.double({ min: 90.3, max: 90.5 })
-          }),
-          selectedOnboardingStop: fc.record({
-            id: fc.uuid(),
-            name: fc.string({ minLength: 5, maxLength: 50 }),
-            latitude: fc.double({ min: 23.7, max: 23.9 }),
-            longitude: fc.double({ min: 90.3, max: 90.5 })
-          }),
-          selectedOffboardingStop: fc.record({
-            id: fc.uuid(),
-            name: fc.string({ minLength: 5, maxLength: 50 }),
-            latitude: fc.double({ min: 23.7, max: 23.9 }),
-            longitude: fc.double({ min: 90.3, max: 90.5 })
+            lat: fc.double({ min: 23.7, max: 23.9, noNaN: true }),
+            lng: fc.double({ min: 90.3, max: 90.5, noNaN: true })
           })
         }),
-        (routeData) => {
+        // Generate two distinct stops with unique IDs
+        fc.uuid(),
+        fc.uuid(),
+        fc.record({
+          name: fc.string({ minLength: 5, maxLength: 50 }).filter(s => s.trim().length >= 5),
+          latitude: fc.double({ min: 23.7, max: 23.9, noNaN: true }),
+          longitude: fc.double({ min: 90.3, max: 90.5, noNaN: true })
+        }),
+        fc.record({
+          name: fc.string({ minLength: 5, maxLength: 50 }).filter(s => s.trim().length >= 5),
+          latitude: fc.double({ min: 23.7, max: 23.9, noNaN: true }),
+          longitude: fc.double({ min: 90.3, max: 90.5, noNaN: true })
+        }),
+        (locations, onboardingId, offboardingId, onboardingData, offboardingData) => {
+          // Ensure IDs are different
+          fc.pre(onboardingId !== offboardingId)
+          
+          const routeData = {
+            ...locations,
+            selectedOnboardingStop: {
+              id: onboardingId,
+              ...onboardingData
+            },
+            selectedOffboardingStop: {
+              id: offboardingId,
+              ...offboardingData
+            }
+          }
+          
           // Requirement 10.4: All four points should be present
           expect(routeData.startingLocation).toBeDefined()
           expect(routeData.destinationLocation).toBeDefined()
@@ -118,8 +134,8 @@ describe('Map Component - Property 22: Complete Route Visualization', () => {
     fc.assert(
       fc.property(
         fc.record({
-          lat: fc.double({ min: 23.7, max: 23.9 }),
-          lng: fc.double({ min: 90.3, max: 90.5 })
+          lat: fc.double({ min: 23.7, max: 23.9, noNaN: true }),
+          lng: fc.double({ min: 90.3, max: 90.5, noNaN: true })
         }),
         (coords) => {
           // Create a scenario where all points are at the same location
@@ -146,7 +162,7 @@ describe('Map Component - Property 22: Complete Route Visualization', () => {
           expect(routeData.selectedOnboardingStop).toBeDefined()
           expect(routeData.selectedOffboardingStop).toBeDefined()
 
-          // Distances should be zero
+          // Distances should be zero (or very close to zero due to floating point)
           const startToOnboarding = calculateDistance(
             routeData.startingLocation,
             {
@@ -154,7 +170,7 @@ describe('Map Component - Property 22: Complete Route Visualization', () => {
               lng: routeData.selectedOnboardingStop.longitude
             }
           )
-          expect(startToOnboarding).toBe(0)
+          expect(startToOnboarding).toBeLessThan(0.001) // Less than 1 meter
         }
       ),
       { numRuns: 100 }

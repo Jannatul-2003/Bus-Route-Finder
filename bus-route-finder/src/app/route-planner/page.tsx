@@ -8,6 +8,7 @@ import { MapPin, NavigationIcon, Loader2, AlertCircle, Moon, Sun, Search } from 
 import { Map } from "@/components/map"
 import { ThresholdInput } from "@/components/ThresholdInput"
 import { StopSelectionCard } from "@/components/StopSelectionCard"
+import { VirtualizedStopList } from "@/components/VirtualizedStopList"
 import { BusResultCard } from "@/components/BusResultCard"
 import { FilterControls } from "@/components/FilterControls"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
@@ -98,34 +99,93 @@ function RoutePlannerPageContent() {
   // Track if a search has been performed
   const [hasSearched, setHasSearched] = React.useState(false)
 
+  // Screen reader announcements
+  const [announcement, setAnnouncement] = React.useState("")
+
+  const announce = (message: string) => {
+    setAnnouncement(message)
+    // Clear after announcement is read
+    setTimeout(() => setAnnouncement(""), 1000)
+  }
+
   // Handlers
   const handleGetLocation = () => {
     routePlannerStore.handleGetLocation()
   }
 
   const handleSearchStops = async () => {
-    if (!state.fromCoords || !state.toCoords) {
-      routePlannerStore.setFromLocation("")
-      routePlannerStore.setToLocation("")
+    if (!state.fromLocation || !state.toLocation) {
       return
     }
 
     setHasSearched(true)
+    announce("Searching for nearby stops")
 
-    // Discover stops near starting location
-    await routePlannerStore.discoverStopsNearLocation(
-      state.fromCoords,
-      state.startingThreshold,
-      true
-    )
+    try {
+      // If coordinates are not set, search for stops by name to get coordinates
+      let fromCoords = state.fromCoords
+      let toCoords = state.toCoords
 
-    // Discover stops near destination location
-    if (state.destinationThreshold !== null) {
+      // Search for starting location if coordinates not set
+      if (!fromCoords && state.fromLocation !== "Current Location") {
+        const response = await fetch(`/api/stops/search?q=${encodeURIComponent(state.fromLocation)}`)
+        if (response.ok) {
+          const stops = await response.json()
+          if (stops && stops.length > 0) {
+            fromCoords = {
+              lat: stops[0].latitude,
+              lng: stops[0].longitude
+            }
+          } else {
+            announce("Starting location not found")
+            return
+          }
+        }
+      }
+
+      // Search for destination location if coordinates not set
+      if (!toCoords) {
+        const response = await fetch(`/api/stops/search?q=${encodeURIComponent(state.toLocation)}`)
+        if (response.ok) {
+          const stops = await response.json()
+          if (stops && stops.length > 0) {
+            toCoords = {
+              lat: stops[0].latitude,
+              lng: stops[0].longitude
+            }
+          } else {
+            announce("Destination location not found")
+            return
+          }
+        }
+      }
+
+      if (!fromCoords || !toCoords) {
+        announce("Please provide valid locations")
+        return
+      }
+
+      // Discover stops near starting location
       await routePlannerStore.discoverStopsNearLocation(
-        state.toCoords,
-        state.destinationThreshold,
-        false
+        fromCoords,
+        state.startingThreshold,
+        true
       )
+
+      // Discover stops near destination location
+      if (state.destinationThreshold !== null) {
+        await routePlannerStore.discoverStopsNearLocation(
+          toCoords,
+          state.destinationThreshold,
+          false
+        )
+      }
+
+      const totalStops = state.startingStops.length + state.destinationStops.length
+      announce(`Search complete. Found ${totalStops} stops.`)
+    } catch (error) {
+      console.error("Error searching stops:", error)
+      announce("Error searching for stops")
     }
   }
 
@@ -163,14 +223,18 @@ function RoutePlannerPageContent() {
 
   const handleOnboardingStopSelect = async (stop: StopWithDistance) => {
     await routePlannerStore.selectOnboardingStop(stop)
+    announce(`Selected onboarding stop: ${stop.name}`)
   }
 
   const handleOffboardingStopSelect = async (stop: StopWithDistance) => {
     await routePlannerStore.selectOffboardingStop(stop)
+    announce(`Selected offboarding stop: ${stop.name}`)
 
     // Automatically search for buses when both stops are selected
     if (state.selectedOnboardingStop) {
+      announce("Searching for bus routes")
       await routePlannerStore.searchBusesForRoute()
+      announce(`Found ${state.availableBuses.length} bus routes`)
     }
   }
 
@@ -181,15 +245,30 @@ function RoutePlannerPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Skip to main content link for keyboard navigation */}
+      <a href="#main-content" className="skip-to-main">
+        Skip to main content
+      </a>
+
+      {/* Screen reader announcements */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {announcement}
+      </div>
+
+      {/* Header - Responsive for mobile */}
       <div className="border-b bg-card">
-        <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">
+        <div className="container mx-auto px-4 py-4 sm:py-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-foreground mb-1 sm:mb-2">
                 🚌 Dhaka Bus Route Planner
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-xs sm:text-sm text-muted-foreground hidden sm:block">
                 Find the best bus routes with threshold-based stop discovery
               </p>
             </div>
@@ -198,7 +277,7 @@ function RoutePlannerPageContent() {
               size="icon"
               onClick={() => setDarkMode(!darkMode)}
               aria-label="Toggle dark mode"
-              className="shrink-0"
+              className="shrink-0 min-w-[44px] min-h-[44px]"
             >
               {darkMode ? (
                 <Sun className="h-5 w-5" />
@@ -212,10 +291,10 @@ function RoutePlannerPageContent() {
 
       {/* Error Display */}
       {state.error && (
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto px-4 py-4" role="alert" aria-live="assertive">
           <Card className="border-destructive/50 bg-destructive/10">
             <CardContent className="p-4 flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
               <div className="flex-1">
                 <p className="font-semibold text-destructive">Error</p>
                 <p className="text-sm text-destructive/90">{state.error}</p>
@@ -225,6 +304,7 @@ function RoutePlannerPageContent() {
                 size="sm"
                 onClick={handleRetry}
                 className="shrink-0"
+                aria-label="Retry search"
               >
                 Retry
               </Button>
@@ -233,16 +313,16 @@ function RoutePlannerPageContent() {
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column: Inputs and Controls */}
-          <div className="space-y-6">
+      {/* Main Content - Mobile-first responsive layout */}
+      <main id="main-content" className="container mx-auto px-4 py-4 sm:py-6 lg:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          {/* Left Column: Inputs and Controls - Responsive spacing */}
+          <div className="space-y-4 sm:space-y-6">
             {/* Location Inputs */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" />
+                  <MapPin className="h-5 w-5 text-primary" aria-hidden="true" />
                   Location Selection
                 </CardTitle>
               </CardHeader>
@@ -260,7 +340,9 @@ function RoutePlannerPageContent() {
                       onChange={(e) =>
                         routePlannerStore.setFromLocation(e.target.value)
                       }
-                      className="flex-1"
+                      className="flex-1 min-h-[48px] text-base"
+                      aria-required="true"
+                      aria-describedby="from-description"
                     />
                     <Button
                       variant="outline"
@@ -268,10 +350,14 @@ function RoutePlannerPageContent() {
                       onClick={handleGetLocation}
                       title="Use current location"
                       aria-label="Get current location"
+                      className="min-w-[48px] min-h-[48px] shrink-0"
                     >
-                      <NavigationIcon className="h-4 w-4" />
+                      <NavigationIcon className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
+                  <p id="from-description" className="sr-only">
+                    Enter your starting location or use the button to get your current location
+                  </p>
                 </div>
 
                 {/* Destination Location */}
@@ -286,7 +372,13 @@ function RoutePlannerPageContent() {
                     onChange={(e) =>
                       routePlannerStore.setToLocation(e.target.value)
                     }
+                    className="min-h-[48px] text-base"
+                    aria-required="true"
+                    aria-describedby="to-description"
                   />
+                  <p id="to-description" className="sr-only">
+                    Enter your destination location
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -312,23 +404,25 @@ function RoutePlannerPageContent() {
               </CardContent>
             </Card>
 
-            {/* Search Button */}
+            {/* Search Button - Touch-optimized */}
             <Button
               onClick={handleSearchStops}
-              className="w-full"
+              className="w-full min-h-[52px] text-base"
               size="lg"
               disabled={
                 !state.fromLocation || !state.toLocation || state.loading
               }
+              aria-label={state.loading ? "Searching for stops" : "Search for nearby stops"}
+              aria-busy={state.loading}
             >
               {state.loading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
                   Searching...
                 </>
               ) : (
                 <>
-                  <Search className="h-4 w-4 mr-2" />
+                  <Search className="h-4 w-4 mr-2" aria-hidden="true" />
                   Search Stops
                 </>
               )}
@@ -340,7 +434,7 @@ function RoutePlannerPageContent() {
                 <CardHeader>
                   <CardTitle className="text-base">🚶 Walking Distances</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-3" role="region" aria-label="Walking distances information">
                   {/* Walking distance to onboarding stop */}
                   {state.selectedOnboardingStop && state.walkingDistanceToOnboarding !== null && (
                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
@@ -398,8 +492,8 @@ function RoutePlannerPageContent() {
                   {/* Warning for excessive walking distance (Requirement 9.5) */}
                   {((state.walkingDistanceToOnboarding !== null && state.walkingDistanceToOnboarding > 2000) ||
                     (state.walkingDistanceFromOffboarding !== null && state.walkingDistanceFromOffboarding > 2000)) && (
-                    <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                      <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex items-start gap-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20" role="alert" aria-live="polite">
+                      <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0 mt-0.5" aria-hidden="true" />
                       <div>
                         <p className="text-sm font-medium text-orange-900 dark:text-orange-200">
                           Long Walking Distance
@@ -418,7 +512,7 @@ function RoutePlannerPageContent() {
             {(state.startingStops.length > 0 ||
               state.destinationStops.length > 0 ||
               (state.fromCoords && state.toCoords && !state.loading)) && (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {/* Starting Stops */}
                 <Card>
                   <CardHeader>
@@ -426,7 +520,7 @@ function RoutePlannerPageContent() {
                       📍 Nearby Stops (Starting Location)
                     </CardTitle>
                     {state.startingStops.length > 0 && (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
                         {state.startingStops.length} stop(s) found within{" "}
                         {state.startingThreshold}m
                       </p>
@@ -440,19 +534,31 @@ function RoutePlannerPageContent() {
                         <StopCardSkeleton />
                       </div>
                     ) : state.startingStops.length > 0 ? (
-                      <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {state.startingStops.map((stop) => (
-                          <StopSelectionCard
-                            key={stop.id}
-                            stop={stop}
-                            isSelected={
-                              state.selectedOnboardingStop?.id === stop.id
-                            }
-                            onSelect={handleOnboardingStopSelect}
-                            selectionMode="radio"
-                          />
-                        ))}
-                      </div>
+                      // Use virtualization for performance when there are many stops
+                      state.startingStops.length > 10 ? (
+                        <VirtualizedStopList
+                          stops={state.startingStops}
+                          selectedStopId={state.selectedOnboardingStop?.id || null}
+                          onSelect={handleOnboardingStopSelect}
+                          selectionMode="radio"
+                          role="radiogroup"
+                          ariaLabel="Select onboarding stop"
+                        />
+                      ) : (
+                        <div className="space-y-3 max-h-[60vh] sm:max-h-96 overflow-y-auto" role="radiogroup" aria-label="Select onboarding stop">
+                          {state.startingStops.map((stop) => (
+                            <StopSelectionCard
+                              key={stop.id}
+                              stop={stop}
+                              isSelected={
+                                state.selectedOnboardingStop?.id === stop.id
+                              }
+                              onSelect={handleOnboardingStopSelect}
+                              selectionMode="radio"
+                            />
+                          ))}
+                        </div>
+                      )
                     ) : (
                       <div className="text-center py-8">
                         <div className="flex flex-col items-center gap-3">
@@ -493,7 +599,7 @@ function RoutePlannerPageContent() {
                       🎯 Nearby Stops (Destination)
                     </CardTitle>
                     {state.destinationStops.length > 0 && (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-muted-foreground" role="status" aria-live="polite">
                         {state.destinationStops.length} stop(s) found
                         {state.destinationThreshold !== null
                           ? ` within ${state.destinationThreshold}m`
@@ -509,19 +615,31 @@ function RoutePlannerPageContent() {
                         <StopCardSkeleton />
                       </div>
                     ) : state.destinationStops.length > 0 ? (
-                      <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {state.destinationStops.map((stop) => (
-                          <StopSelectionCard
-                            key={stop.id}
-                            stop={stop}
-                            isSelected={
-                              state.selectedOffboardingStop?.id === stop.id
-                            }
-                            onSelect={handleOffboardingStopSelect}
-                            selectionMode="radio"
-                          />
-                        ))}
-                      </div>
+                      // Use virtualization for performance when there are many stops
+                      state.destinationStops.length > 10 ? (
+                        <VirtualizedStopList
+                          stops={state.destinationStops}
+                          selectedStopId={state.selectedOffboardingStop?.id || null}
+                          onSelect={handleOffboardingStopSelect}
+                          selectionMode="radio"
+                          role="radiogroup"
+                          ariaLabel="Select offboarding stop"
+                        />
+                      ) : (
+                        <div className="space-y-3 max-h-[60vh] sm:max-h-96 overflow-y-auto" role="radiogroup" aria-label="Select offboarding stop">
+                          {state.destinationStops.map((stop) => (
+                            <StopSelectionCard
+                              key={stop.id}
+                              stop={stop}
+                              isSelected={
+                                state.selectedOffboardingStop?.id === stop.id
+                              }
+                              onSelect={handleOffboardingStopSelect}
+                              selectionMode="radio"
+                            />
+                          ))}
+                        </div>
+                      )
                     ) : (
                       <div className="text-center py-8">
                         <div className="flex flex-col items-center gap-3">
@@ -559,13 +677,13 @@ function RoutePlannerPageContent() {
             )}
           </div>
 
-          {/* Right Column: Map */}
-          <div className="space-y-6">
-            <Card className="sticky top-6">
+          {/* Right Column: Map - Responsive positioning */}
+          <div className="space-y-4 sm:space-y-6 order-first lg:order-last">
+            <Card className="lg:sticky lg:top-6">
               <CardHeader>
                 <CardTitle className="text-base">🗺️ Map View</CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-0 sm:p-6">
                 <Map
                   stops={[
                     ...state.startingStops,
@@ -585,14 +703,14 @@ function RoutePlannerPageContent() {
           </div>
         </div>
 
-        {/* Bus Results Section (Full Width) */}
+        {/* Bus Results Section (Full Width) - Responsive */}
         {state.allBuses.length > 0 && (
-          <div className="mt-8 space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-foreground">
+          <div className="mt-6 sm:mt-8 space-y-4 sm:space-y-6" role="region" aria-label="Bus search results">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground">
                 🚌 Available Buses
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs sm:text-sm text-muted-foreground" role="status" aria-live="polite">
                 Showing {state.availableBuses.length} of {state.allBuses.length} bus(es)
               </p>
             </div>
@@ -615,18 +733,20 @@ function RoutePlannerPageContent() {
               }
             />
 
-            {/* Bus Results */}
+            {/* Bus Results - Responsive grid */}
             {state.loading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4" aria-busy="true" aria-label="Loading bus results">
                 <BusCardSkeleton />
                 <BusCardSkeleton />
                 <BusCardSkeleton />
                 <BusCardSkeleton />
               </div>
             ) : state.availableBuses.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4" role="list" aria-label="Available bus routes">
                 {state.availableBuses.map((bus) => (
-                  <BusResultCard key={bus.id} bus={bus} />
+                  <div key={bus.id} role="listitem">
+                    <BusResultCard bus={bus} />
+                  </div>
                 ))}
               </div>
             ) : (
@@ -703,7 +823,7 @@ function RoutePlannerPageContent() {
               </Card>
             </div>
           )}
-      </div>
+      </main>
     </div>
   )
 }

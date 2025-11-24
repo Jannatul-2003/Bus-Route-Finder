@@ -409,26 +409,119 @@ export default function RoutePlannerPage() {
   }
 
   const handleSearchStops = async () => {
-    if (!state.fromCoords || !state.toCoords) {
-      // Try to geocode the locations if they're not coordinates yet
-      // For now, just show an error
+    if (!state.fromLocation || !state.toLocation) {
+      console.log("[DEBUG] Missing location inputs:", { fromLocation: state.fromLocation, toLocation: state.toLocation })
       return
     }
 
-    // Discover stops near starting location
-    await routePlannerStore.discoverStopsNearLocation(
-      state.fromCoords,
-      state.startingThreshold,
-      true
-    )
+    console.log("[DEBUG] Starting search with:", { 
+      fromLocation: state.fromLocation, 
+      toLocation: state.toLocation,
+      fromCoords: state.fromCoords,
+      toCoords: state.toCoords,
+      startingThreshold: state.startingThreshold,
+      destinationThreshold: state.destinationThreshold
+    })
 
-    // Discover stops near destination location
-    if (state.destinationThreshold !== null) {
+    try {
+      let fromCoords = state.fromCoords
+      let toCoords = state.toCoords
+
+      // Geocode starting location if coordinates not set
+      if (!fromCoords && state.fromLocation !== "Current Location") {
+        console.log("[DEBUG] Geocoding starting location:", state.fromLocation)
+        fromCoords = await geocodeLocation(state.fromLocation)
+        if (!fromCoords) {
+          routePlannerStore.setError(
+            `Could not find coordinates for "${state.fromLocation}". Please try a more specific location name.`
+          )
+          return
+        }
+        console.log("[DEBUG] Geocoded fromCoords:", fromCoords)
+        // Store the coordinates in the store so they can be used for walking distance calculation
+        routePlannerStore.setFromCoords(fromCoords)
+      }
+
+      // Geocode destination location if coordinates not set
+      if (!toCoords) {
+        console.log("[DEBUG] Geocoding destination location:", state.toLocation)
+        toCoords = await geocodeLocation(state.toLocation)
+        if (!toCoords) {
+          routePlannerStore.setError(
+            `Could not find coordinates for "${state.toLocation}". Please try a more specific location name.`
+          )
+          return
+        }
+        console.log("[DEBUG] Geocoded toCoords:", toCoords)
+        // Store the coordinates in the store so they can be used for walking distance calculation
+        routePlannerStore.setToCoords(toCoords)
+      }
+
+      if (!fromCoords || !toCoords) {
+        console.log("[DEBUG] Missing coordinates:", { fromCoords, toCoords })
+        return
+      }
+
+      // Discover stops near starting location
+      console.log("[DEBUG] Discovering stops near starting location:", fromCoords, state.startingThreshold)
       await routePlannerStore.discoverStopsNearLocation(
-        state.toCoords,
-        state.destinationThreshold,
-        false
+        fromCoords,
+        state.startingThreshold,
+        true
       )
+      console.log("[DEBUG] Starting stops discovered:", state.startingStops.length)
+
+      // Discover stops near destination location
+      if (state.destinationThreshold !== null) {
+        console.log("[DEBUG] Discovering stops near destination location:", toCoords, state.destinationThreshold)
+        await routePlannerStore.discoverStopsNearLocation(
+          toCoords,
+          state.destinationThreshold,
+          false
+        )
+        console.log("[DEBUG] Destination stops discovered:", state.destinationStops.length)
+      }
+    } catch (error) {
+      console.error("[DEBUG] Error searching stops:", error)
+      routePlannerStore.setError(`Error searching stops: ${error instanceof Error ? error.message : String(error)}`)
+    }
+  }
+
+  /**
+   * Geocode a location name to coordinates using Nominatim (OpenStreetMap)
+   * This allows users to enter any place name, not just bus stop names
+   */
+  const geocodeLocation = async (locationName: string): Promise<{ lat: number; lng: number } | null> => {
+    try {
+      // Use Nominatim API for geocoding (free, no API key required)
+      // Bias results towards Dhaka, Bangladesh
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?` +
+        `q=${encodeURIComponent(locationName + ", Dhaka, Bangladesh")}` +
+        `&format=json` +
+        `&limit=1` +
+        `&countrycodes=bd`
+      )
+      
+      if (!response.ok) {
+        console.error("[DEBUG] Geocoding API error:", response.status)
+        return null
+      }
+
+      const results = await response.json()
+      console.log("[DEBUG] Geocoding results:", results)
+
+      if (results && results.length > 0) {
+        return {
+          lat: parseFloat(results[0].lat),
+          lng: parseFloat(results[0].lon)
+        }
+      }
+
+      return null
+    } catch (error) {
+      console.error("[DEBUG] Geocoding error:", error)
+      return null
     }
   }
 
@@ -437,11 +530,69 @@ export default function RoutePlannerPage() {
   }
 
   const handleOffboardingStopSelect = async (stop: StopWithDistance) => {
+    console.log("[DEBUG] Offboarding stop selected:", stop)
     await routePlannerStore.selectOffboardingStop(stop)
 
-    // Automatically search for buses when both stops are selected
-    if (state.selectedOnboardingStop) {
+    // Get the latest state after selection
+    const latestState = routePlannerStore.getState()
+    console.log("[DEBUG] Latest state after offboarding selection:", {
+      onboarding: latestState.selectedOnboardingStop?.name,
+      offboarding: latestState.selectedOffboardingStop?.name
+    })
+    
+    // Don't automatically search - user will click "Find Buses" button
+  }
+
+  const handleFindBuses = async () => {
+    console.log("[DEBUG] Find Buses clicked")
+    
+    // If no offboarding stop is selected and no destination threshold is set,
+    // we need to find a stop matching the destination location name
+    if (!state.selectedOffboardingStop) {
+      console.log("[DEBUG] No offboarding stop selected, searching by destination name")
+      
+      // Search for a stop matching the destination location
+      try {
+        const response = await fetch(`/api/stops/search?q=${encodeURIComponent(state.toLocation)}`)
+        if (response.ok) {
+          const stops = await response.json()
+          console.log("[DEBUG] Found destination stops by name:", stops)
+          
+          if (stops && stops.length > 0) {
+            // Use the first matching stop as the offboarding stop
+            const destinationStop = stops[0]
+            
+            // Create a StopWithDistance object (distance = 0 since we're matching by name)
+            const offboardingStop = {
+              ...destinationStop,
+              distance: 0,
+              distanceMethod: 'OSRM' as const
+            }
+            
+            console.log("[DEBUG] Auto-selecting offboarding stop:", offboardingStop.name)
+            await routePlannerStore.selectOffboardingStop(offboardingStop)
+          } else {
+            routePlannerStore.setError(
+              `No stop found matching "${state.toLocation}". Please try a different name or set a destination threshold to find nearby stops.`
+            )
+            return
+          }
+        }
+      } catch (error) {
+        console.error("[DEBUG] Error searching for destination stop:", error)
+        routePlannerStore.setError(`Error finding destination stop: ${error instanceof Error ? error.message : String(error)}`)
+        return
+      }
+    }
+    
+    // Now search for buses
+    const latestState = routePlannerStore.getState()
+    if (latestState.selectedOnboardingStop && latestState.selectedOffboardingStop) {
+      console.log("[DEBUG] Searching for buses between stops...")
       await routePlannerStore.searchBusesForRoute()
+      
+      const finalState = routePlannerStore.getState()
+      console.log("[DEBUG] Bus search completed, available buses:", finalState.availableBuses.length)
     }
   }
 
@@ -526,7 +677,7 @@ export default function RoutePlannerPage() {
                   <div className="flex gap-2">
                     <Input
                       id="from"
-                      placeholder="Enter starting location"
+                      placeholder="e.g., Merul Badda, Dhanmondi 27, Gulshan Circle"
                       value={state.fromLocation}
                       onChange={(e) =>
                         routePlannerStore.setFromLocation(e.target.value)
@@ -543,6 +694,9 @@ export default function RoutePlannerPage() {
                       <NavigationIcon className="h-4 w-4" />
                     </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Enter any location in Dhaka - we'll find nearby bus stops
+                  </p>
                 </div>
 
                 {/* Destination Location */}
@@ -552,12 +706,15 @@ export default function RoutePlannerPage() {
                   </label>
                   <Input
                     id="to"
-                    placeholder="Enter destination"
+                    placeholder="e.g., Badda, Mohakhali, Uttara"
                     value={state.toLocation}
                     onChange={(e) =>
                       routePlannerStore.setToLocation(e.target.value)
                     }
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Enter any location in Dhaka - we'll find nearby bus stops
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -608,6 +765,28 @@ export default function RoutePlannerPage() {
                 </>
               )}
             </Button>
+
+            {/* Find Buses Button - Shows when onboarding stop is selected */}
+            {state.selectedOnboardingStop && (
+              <Button
+                onClick={handleFindBuses}
+                className="w-full"
+                size="lg"
+                variant="default"
+                disabled={state.loading}
+              >
+                {state.loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Finding Buses...
+                  </>
+                ) : (
+                  <>
+                    🚌 Find Buses
+                  </>
+                )}
+              </Button>
+            )}
 
             {/* Stop Selection */}
             {(state.startingStops.length > 0 ||

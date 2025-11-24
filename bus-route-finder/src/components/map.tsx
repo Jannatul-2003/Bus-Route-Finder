@@ -3,19 +3,19 @@
 import { useEffect, useRef } from "react"
 import "leaflet/dist/leaflet.css"
 
-interface Coordinates {
+export interface Coordinates {
   lat: number
   lng: number
 }
 
-interface Stop {
+export interface Stop {
   id: string
   name: string
   latitude: number
   longitude: number
 }
 
-interface MapProps {
+export interface MapProps {
   // All discovered stops
   stops?: Stop[]
   
@@ -57,22 +57,71 @@ export function Map({
 
       if (!mapContainer.current || isInitialized.current) return
 
-      // Create map
-      map.current = L.map(mapContainer.current).setView([center.lat, center.lng], zoom)
+      // Detect if mobile device
+      const isMobile = window.innerWidth < 768
+
+      // Create map with mobile-optimized settings
+      map.current = L.map(mapContainer.current, {
+        // Enable touch interactions for mobile
+        touchZoom: true,
+        scrollWheelZoom: !isMobile, // Disable scroll zoom on mobile to prevent accidental zooming
+        doubleClickZoom: true,
+        boxZoom: !isMobile,
+        keyboard: true,
+        dragging: true,
+        zoomControl: false, // We'll add custom zoom control
+        // Mobile-specific optimizations
+        fadeAnimation: !isMobile,
+        zoomAnimation: true,
+        markerZoomAnimation: !isMobile,
+      }).setView([center.lat, center.lng], zoom)
+      
       isInitialized.current = true
 
       // Add tile layer
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
         maxZoom: 19,
+        // Mobile optimizations
+        updateWhenIdle: isMobile,
+        updateWhenZooming: !isMobile,
+        keepBuffer: isMobile ? 1 : 2,
       }).addTo(map.current)
 
       // Create layer groups for markers and polylines
       markersLayer.current = L.layerGroup().addTo(map.current)
       polylinesLayer.current = L.layerGroup().addTo(map.current)
 
-      // Add zoom control
-      L.control.zoom({ position: 'topright' }).addTo(map.current)
+      // Add zoom control with mobile-friendly positioning
+      L.control.zoom({ 
+        position: isMobile ? 'bottomright' : 'topright',
+        zoomInTitle: 'Zoom in',
+        zoomOutTitle: 'Zoom out'
+      }).addTo(map.current)
+
+      // Add scale control for mobile
+      if (isMobile) {
+        L.control.scale({ 
+          position: 'bottomleft',
+          imperial: false 
+        }).addTo(map.current)
+      }
+
+      // Enable swipe gestures on mobile
+      if (isMobile && map.current) {
+        // Add custom event handlers for better touch experience
+        map.current.on('movestart', () => {
+          if (mapContainer.current) {
+            mapContainer.current.style.cursor = 'grabbing'
+          }
+        })
+        
+        map.current.on('moveend', () => {
+          if (mapContainer.current) {
+            mapContainer.current.style.cursor = 'grab'
+          }
+        })
+      }
     }
 
     initMap().catch((err) => console.error("[Map] Init error:", err))
@@ -229,5 +278,14 @@ export function Map({
     selectedOffboardingStop
   ])
 
-  return <div ref={mapContainer} className="w-full h-96 rounded-lg border" />
+  return (
+    <div 
+      ref={mapContainer} 
+      className="w-full h-[300px] sm:h-[400px] lg:h-96 rounded-lg border touch-pan-x touch-pan-y"
+      style={{ 
+        cursor: 'grab',
+        touchAction: 'pan-x pan-y' 
+      }}
+    />
+  )
 }
