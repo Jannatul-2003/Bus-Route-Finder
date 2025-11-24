@@ -29,11 +29,14 @@ export class DistanceCalculator {
 
   /**
    * Calculate distances using the current strategy with automatic fallback
+   * Requirements 2.3: Fallback to Haversine when OSRM is unavailable
+   * Requirements 8.3: Handle OSRM errors with timeout
+   * Requirements 8.4: Automatic fallback on OSRM failure
    * 
    * @param origins Array of origin coordinates
    * @param destinations Array of destination coordinates
    * @param useFallbackOnError If true, automatically falls back to fallback strategy on error
-   * @returns Promise resolving to distance matrix
+   * @returns Promise resolving to distance matrix with method indicator
    */
   async calculateDistances(
     origins: Coordinate[],
@@ -48,24 +51,46 @@ export class DistanceCalculator {
         return await this.primaryStrategy.calculateDistances(origins, destinations)
       } catch (error) {
         console.warn(
-          `[Strategy] Primary strategy (${this.primaryStrategy.getName()}) failed:`,
-          error,
+          `[DistanceCalculator] Primary strategy (${this.primaryStrategy.getName()}) failed:`,
+          error instanceof Error ? error.message : String(error),
         )
 
         if (useFallbackOnError) {
+          // Requirement 8.4: Automatic fallback to Haversine
           console.log(
-            `[Strategy] Falling back to ${this.fallbackStrategy.getName()} strategy`,
+            `[DistanceCalculator] Falling back to ${this.fallbackStrategy.getName()} strategy`,
           )
-          return await this.fallbackStrategy.calculateDistances(origins, destinations)
+          
+          try {
+            return await this.fallbackStrategy.calculateDistances(origins, destinations)
+          } catch (fallbackError) {
+            console.error(
+              `[DistanceCalculator] Fallback strategy also failed:`,
+              fallbackError instanceof Error ? fallbackError.message : String(fallbackError)
+            )
+            throw new Error(
+              `Both primary and fallback distance calculation strategies failed. ` +
+              `Primary: ${error instanceof Error ? error.message : String(error)}. ` +
+              `Fallback: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+            )
+          }
         }
 
         throw error
       }
     } else {
-      console.warn(
-        `[Strategy] Primary strategy (${this.primaryStrategy.getName()}) is not available, using fallback`,
-      )
-      return await this.fallbackStrategy.calculateDistances(origins, destinations)
+      // Requirement 2.3: Use fallback when primary is not available
+      // Only use fallback if useFallbackOnError is true
+      if (useFallbackOnError) {
+        console.warn(
+          `[DistanceCalculator] Primary strategy (${this.primaryStrategy.getName()}) is not available, using fallback`,
+        )
+        return await this.fallbackStrategy.calculateDistances(origins, destinations)
+      } else {
+        throw new Error(
+          `Primary strategy (${this.primaryStrategy.getName()}) is not available and fallback is disabled`
+        )
+      }
     }
   }
 

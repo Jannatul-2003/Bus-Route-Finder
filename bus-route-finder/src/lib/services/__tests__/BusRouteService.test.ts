@@ -44,16 +44,26 @@ describe('BusRouteService', () => {
       expect(result).toEqual([])
     })
 
-    it('should throw error when database query fails', async () => {
-      mockSupabaseClient.eq.mockResolvedValueOnce({
-        data: null,
-        error: { message: 'Database error' },
-      })
+    it('should throw error when database query fails after retries', async () => {
+      // Mock all 3 retry attempts to fail
+      mockSupabaseClient.eq
+        .mockResolvedValueOnce({
+          data: null,
+          error: { message: 'Database error' },
+        })
+        .mockResolvedValueOnce({
+          data: null,
+          error: { message: 'Database error' },
+        })
+        .mockResolvedValueOnce({
+          data: null,
+          error: { message: 'Database error' },
+        })
 
       await expect(service.findBusRoutes('stop1', 'stop2')).rejects.toThrow(
-        'Failed to fetch bus routes: Database error'
+        'Failed to fetch bus routes after 3 attempts'
       )
-    })
+    }, 10000) // Increase timeout for retry delays
 
     it('should query for buses serving both stops', async () => {
       mockSupabaseClient.eq.mockResolvedValueOnce({

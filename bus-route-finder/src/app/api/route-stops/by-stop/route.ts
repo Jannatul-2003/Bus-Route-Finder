@@ -81,7 +81,7 @@ export async function GET(request: Request) {
     if (routeError) throw routeError
 
     // Get bus details for these route stops
-    const busIds = [...new Set(routeStops?.map((rs) => rs.bus_id) || [])]
+    const busIds = [...new Set(routeStops?.map((rs: any) => rs.bus_id) || [])]
 
     if (busIds.length === 0) {
       return NextResponse.json([])

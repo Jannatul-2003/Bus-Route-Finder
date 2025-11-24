@@ -6,4 +6,3 @@
  */
 
 export { BusFilterBuilder } from './BusFilterBuilder'
-export type { EnhancedBusResult } from './BusFilterBuilder'

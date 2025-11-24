@@ -36,12 +36,36 @@ export class HaversineStrategy implements DistanceCalculationStrategy {
   }
 
   /**
+   * Validate coordinates before calculations
+   * Requirements 8.3: Validate coordinates before distance calculations
+   */
+  private validateCoordinates(origins: Coordinate[], destinations: Coordinate[]): void {
+    const allCoords = [...origins, ...destinations]
+    
+    for (const coord of allCoords) {
+      if (coord.lat < -90 || coord.lat > 90) {
+        throw new Error(`Invalid latitude: ${coord.lat}. Must be between -90 and 90.`)
+      }
+      if (coord.lng < -180 || coord.lng > 180) {
+        throw new Error(`Invalid longitude: ${coord.lng}. Must be between -180 and 180.`)
+      }
+      if (isNaN(coord.lat) || isNaN(coord.lng)) {
+        throw new Error(`Invalid coordinates: lat=${coord.lat}, lng=${coord.lng}`)
+      }
+    }
+  }
+
+  /**
    * Calculate distances between origins and destinations using Haversine formula
+   * Requirements 8.3: Validate coordinates before distance calculations
    */
   async calculateDistances(
     origins: Coordinate[],
     destinations: Coordinate[],
   ): Promise<DistanceResult[][]> {
+    // Validate coordinates before calculation
+    this.validateCoordinates(origins, destinations)
+
     return origins.map((origin) =>
       destinations.map((destination) => {
         const distance = this.calculateHaversineDistance(origin, destination)

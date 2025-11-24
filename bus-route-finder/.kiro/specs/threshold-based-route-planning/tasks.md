@@ -224,7 +224,7 @@
   - Implement sort functionality
   - _Requirements: 4.4, 4.5, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7_
 
-- [ ] 18. Enhance map visualization
+- [-] 18. Enhance map visualization
   - Display all discovered stops as markers on map
   - Highlight selected onboarding stop with distinct marker (green)
   - Highlight selected offboarding stop with distinct marker (red)
@@ -244,7 +244,7 @@
   - **Property 22: Complete Route Visualization**
   - **Validates: Requirements 10.4, 10.5**
 
-- [ ] 19. Implement error handling and edge cases
+- [x] 19. Implement error handling and edge cases
   - Add OSRM timeout handling (30 seconds)
   - Implement fallback to Haversine with user notification
   - Handle geolocation permission denial
@@ -258,7 +258,7 @@
   - **Property 19: OSRM Error Handling**
   - **Validates: Requirements 8.3**
 
-- [ ] 20. Create API routes for enhanced queries
+- [x] 20. Create API routes for enhanced queries
   - Create /api/stops/within-threshold endpoint for stop discovery
   - Create /api/buses/between-stops endpoint for bus route queries
   - Create /api/route-stops/journey-length endpoint for distance calculation

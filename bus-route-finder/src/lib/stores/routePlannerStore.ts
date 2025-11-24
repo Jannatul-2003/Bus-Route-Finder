@@ -683,11 +683,19 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
     await this.#fetchActiveBuses()
   }
 
+  /**
+   * Handle geolocation request
+   * Requirements 8.4: Handle geolocation permission denial gracefully
+   */
   handleGetLocation() {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      this.#setState({ error: "Geolocation is not supported in this environment" })
+      this.#setState({ 
+        error: "Geolocation is not supported in this browser. Please enter your location manually." 
+      })
       return
     }
+
+    this.#setState({ loading: true, error: null })
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
@@ -697,13 +705,41 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
           },
+          loading: false,
           error: null,
         })
       },
       (error) => {
-        console.error("[v0] Error getting location:", error)
-        this.#setState({ error: "Unable to get your current location" })
+        console.error("[RoutePlannerStore] Geolocation error:", error)
+        
+        // Requirement 8.4: Handle geolocation permission denial with specific messages
+        let errorMessage = "Unable to get your current location. "
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage += "Location permission was denied. Please enable location access in your browser settings or enter your location manually."
+            break
+          case error.POSITION_UNAVAILABLE:
+            errorMessage += "Location information is unavailable. Please try again or enter your location manually."
+            break
+          case error.TIMEOUT:
+            errorMessage += "Location request timed out. Please try again or enter your location manually."
+            break
+          default:
+            errorMessage += "Please enter your location manually."
+            break
+        }
+        
+        this.#setState({ 
+          loading: false,
+          error: errorMessage 
+        })
       },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000, // 10 second timeout
+        maximumAge: 0
+      }
     )
   }
 

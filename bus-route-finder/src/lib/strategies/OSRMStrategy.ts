@@ -17,12 +17,37 @@ export class OSRMStrategy implements DistanceCalculationStrategy {
   }
 
   /**
+   * Validate coordinates before making API calls
+   * Requirements 8.3: Validate coordinates before distance calculations
+   */
+  private validateCoordinates(origins: Coordinate[], destinations: Coordinate[]): void {
+    const allCoords = [...origins, ...destinations]
+    
+    for (const coord of allCoords) {
+      if (coord.lat < -90 || coord.lat > 90) {
+        throw new Error(`Invalid latitude: ${coord.lat}. Must be between -90 and 90.`)
+      }
+      if (coord.lng < -180 || coord.lng > 180) {
+        throw new Error(`Invalid longitude: ${coord.lng}. Must be between -180 and 180.`)
+      }
+      if (isNaN(coord.lat) || isNaN(coord.lng)) {
+        throw new Error(`Invalid coordinates: lat=${coord.lat}, lng=${coord.lng}`)
+      }
+    }
+  }
+
+  /**
    * Calculate distances between origins and destinations using OSRM API
+   * Requirements 8.3: OSRM timeout handling (30 seconds)
+   * Requirements 2.3: Handle OSRM unavailability with proper error messages
    */
   async calculateDistances(
     origins: Coordinate[],
     destinations: Coordinate[],
   ): Promise<DistanceResult[][]> {
+    // Validate coordinates before making the call
+    this.validateCoordinates(origins, destinations)
+
     // OSRM expects coordinates in format: longitude,latitude;longitude,latitude;...
     const coordinates = [
       ...origins.map((o) => `${o.lng},${o.lat}`),
@@ -32,7 +57,15 @@ export class OSRMStrategy implements DistanceCalculationStrategy {
     const osrmUrl = `${this.baseUrl}/table/v1/driving/${coordinates}?annotations=distance,duration`
 
     try {
-      const response = await fetch(osrmUrl, { signal: AbortSignal.timeout(this.timeout) })
+      // Requirement 8.3: Set 30-second timeout for OSRM requests
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), this.timeout)
+
+      const response = await fetch(osrmUrl, { 
+        signal: controller.signal 
+      })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         throw new Error(`OSRM API error: ${response.status} ${response.statusText}`)
@@ -79,7 +112,17 @@ export class OSRMStrategy implements DistanceCalculationStrategy {
 
       return results
     } catch (error) {
-      throw new Error(`OSRM calculation failed: ${String(error)}`)
+      // Requirement 8.3: Handle timeout errors specifically
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`OSRM request timed out after ${this.timeout}ms`)
+      }
+      
+      // Requirement 2.3: Provide clear error messages for OSRM failures
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('OSRM service is unreachable. Network error occurred.')
+      }
+      
+      throw new Error(`OSRM calculation failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 

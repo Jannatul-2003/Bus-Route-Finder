@@ -157,7 +157,7 @@ export async function GET(request: Request) {
     }
 
     // Get stop details
-    const stopIds = routeStops.map((rs) => rs.stop_id)
+    const stopIds = routeStops.map((rs: any) => rs.stop_id)
     const { data: stops, error: stopsError } = await supabase
       .from("stops")
       .select("id, name, latitude, longitude")
@@ -184,23 +184,23 @@ export async function GET(request: Request) {
 
     // Pre-rank stops by straight-line distance and keep a limited set for OSRM
     const stopsRanked = stops
-      .map((s) => {
+      .map((s: any) => {
         const hv = haversineKm(latitude, longitude, s.latitude, s.longitude)
         return {
           ...s,
           haversineKm: hv,
           // Provide a default distance so both OSRM-calculated and fallback objects share the same shape
           distance: hv,
-          stopOrder: routeStops.find((rs) => rs.stop_id === s.id)?.stop_order || 0,
+          stopOrder: routeStops.find((rs: any) => rs.stop_id === s.id)?.stop_order || 0,
         }
       })
-      .sort((a, b) => a.haversineKm - b.haversineKm)
+      .sort((a: any, b: any) => a.haversineKm - b.haversineKm)
 
     const candidateStops = stopsRanked.slice(0, Math.min(MAX_OSRM_CANDIDATES, stopsRanked.length))
 
     // Call OSRM Distance API with reduced candidates
     const origins = [{ lat: latitude, lng: longitude }]
-    const destinations = candidateStops.map((stop) => ({ lat: stop.latitude, lng: stop.longitude }))
+    const destinations = candidateStops.map((stop: any) => ({ lat: stop.latitude, lng: stop.longitude }))
 
     // Build a robust base URL for internal calls
     const headers = new Headers(request.headers)
@@ -208,11 +208,11 @@ export async function GET(request: Request) {
     const proto = headers.get("x-forwarded-proto") || (host.includes("localhost") ? "http" : "https")
     const baseUrl = `${proto}://${host}`
 
-    let stopsWithDistance = candidateStops.map((stop) => ({
+    let stopsWithDistance = candidateStops.map((stop: any) => ({
       ...stop,
       // default to haversine as a safe fallback
       distance: stop.haversineKm,
-      stopOrder: routeStops.find((rs) => rs.stop_id === stop.id)?.stop_order || 0,
+      stopOrder: routeStops.find((rs: any) => rs.stop_id === stop.id)?.stop_order || 0,
     }))
 
     try {
@@ -230,13 +230,13 @@ export async function GET(request: Request) {
 
       // Extract distances and prefer OSRM values when available
       const distances = distanceData.rows[0]?.elements || []
-      stopsWithDistance = candidateStops.map((stop, index) => {
+      stopsWithDistance = candidateStops.map((stop: any, index: number) => {
         const element = distances[index]
         const distanceInKm = element?.distance?.value ? element.distance.value / 1000 : stop.haversineKm
         return {
           ...stop,
           distance: distanceInKm,
-          stopOrder: routeStops.find((rs) => rs.stop_id === stop.id)?.stop_order || 0,
+          stopOrder: routeStops.find((rs: any) => rs.stop_id === stop.id)?.stop_order || 0,
         }
       })
     } catch (e) {
@@ -245,8 +245,8 @@ export async function GET(request: Request) {
     }
 
     // If nothing came back from OSRM (e.g., all Infinity), pick the nearest by haversine as a fallback
-    const finiteStops = stopsWithDistance.filter((s) => Number.isFinite(s.distance))
-    const closest = (finiteStops.length > 0 ? finiteStops : stopsRanked).sort((a, b) => a.distance - b.distance)[0]
+    const finiteStops = stopsWithDistance.filter((s: any) => Number.isFinite(s.distance))
+    const closest = (finiteStops.length > 0 ? finiteStops : stopsRanked).sort((a: any, b: any) => a.distance - b.distance)[0]
 
     const withinThreshold = Number.isFinite(closest.distance) && closest.distance <= DISTANCE_THRESHOLD_KM
 

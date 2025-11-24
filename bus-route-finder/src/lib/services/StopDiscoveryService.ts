@@ -48,20 +48,45 @@ export class StopDiscoveryService {
   }
   
   /**
-   * Fetch all stops from Supabase
+   * Fetch all stops from Supabase with retry logic
+   * Requirements 8.4: Retry logic for database connection failures (3 attempts)
    * 
    * @returns Promise resolving to array of all stops
-   * @throws Error if database query fails
+   * @throws Error if database query fails after all retries
    */
   async fetchAllStops(): Promise<Stop[]> {
-    const { data, error } = await this.supabaseClient
-      .from('stops')
-      .select('*')
-    
-    if (error) {
-      throw new Error(`Failed to fetch stops: ${error.message}`)
+    const maxRetries = 3
+    let lastError: Error | null = null
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const { data, error } = await this.supabaseClient
+          .from('stops')
+          .select('*')
+        
+        if (error) {
+          throw new Error(`Failed to fetch stops: ${error.message}`)
+        }
+        
+        return data as Stop[]
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error))
+        
+        if (attempt < maxRetries) {
+          // Exponential backoff: wait 1s, 2s, 4s
+          const waitTime = Math.pow(2, attempt - 1) * 1000
+          console.warn(
+            `[StopDiscoveryService] Database query failed (attempt ${attempt}/${maxRetries}). ` +
+            `Retrying in ${waitTime}ms...`,
+            lastError.message
+          )
+          await new Promise(resolve => setTimeout(resolve, waitTime))
+        }
+      }
     }
-    
-    return data as Stop[]
+
+    throw new Error(
+      `Failed to fetch stops after ${maxRetries} attempts: ${lastError?.message || 'Unknown error'}`
+    )
   }
 }

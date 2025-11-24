@@ -10,6 +10,7 @@ import { ThresholdInput } from "@/components/ThresholdInput"
 import { StopSelectionCard } from "@/components/StopSelectionCard"
 import { BusResultCard } from "@/components/BusResultCard"
 import { FilterControls } from "@/components/FilterControls"
+import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { routePlannerStore } from "@/lib/stores/routePlannerStore"
 import type { StopWithDistance } from "@/lib/types/database"
 
@@ -59,7 +60,11 @@ function BusCardSkeleton() {
   )
 }
 
-export default function RoutePlannerPage() {
+/**
+ * Route Planner Page Component
+ * Requirements 8.4: Wrapped with Error Boundary for component error handling
+ */
+function RoutePlannerPageContent() {
   const [state, setState] = React.useState(routePlannerStore.getState())
   const [darkMode, setDarkMode] = React.useState(false)
 
@@ -566,6 +571,10 @@ export default function RoutePlannerPage() {
                     ...state.startingStops,
                     ...state.destinationStops,
                   ]}
+                  startingLocation={state.fromCoords}
+                  destinationLocation={state.toCoords}
+                  selectedOnboardingStop={state.selectedOnboardingStop}
+                  selectedOffboardingStop={state.selectedOffboardingStop}
                   center={
                     state.fromCoords || { lat: 23.8103, lng: 90.4125 }
                   }
@@ -696,5 +705,18 @@ export default function RoutePlannerPage() {
           )}
       </div>
     </div>
+  )
+}
+
+
+/**
+ * Route Planner Page with Error Boundary
+ * Requirements 8.4: React error boundaries for component errors
+ */
+export default function RoutePlannerPage() {
+  return (
+    <ErrorBoundary>
+      <RoutePlannerPageContent />
+    </ErrorBoundary>
   )
 }
