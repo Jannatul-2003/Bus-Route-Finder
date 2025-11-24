@@ -18,10 +18,11 @@ export interface BusRoute {
 
 /**
  * Route stop with joined bus and stop details
+ * Note: Supabase returns relations with the table name (buses, stops)
  */
 export interface RouteStopWithDetails extends RouteStop {
-  bus?: Bus
-  stop?: Stop
+  buses?: Bus  // Supabase returns this as 'buses' (table name)
+  stops?: Stop  // Supabase returns this as 'stops' (table name)
 }
 
 /**
@@ -61,6 +62,8 @@ export class BusRouteService {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        console.log('[BusRouteService] Querying for stops:', { onboardingStopId, offboardingStopId })
+        
         // Query route_stops to find buses serving both stops
         const { data: routes, error } = await this.supabaseClient
           .from('route_stops')
@@ -90,13 +93,23 @@ export class BusRouteService {
           .in('stop_id', [onboardingStopId, offboardingStopId])
           .eq('buses.status', 'active')
         
+        console.log('[BusRouteService] Query result:', { routesCount: routes?.length, error })
+        
         if (error) {
           throw new Error(`Failed to fetch bus routes: ${error.message}`)
         }
         
         if (!routes || routes.length === 0) {
+          console.log('[BusRouteService] No routes found for these stop IDs')
           return []
         }
+        
+        console.log('[BusRouteService] Found route_stops:', routes.map(r => ({
+          bus: r.buses?.name,
+          stop: r.stops?.name,
+          stop_order: r.stop_order,
+          direction: r.direction
+        })))
         
         // Filter for valid routes where onboarding comes before offboarding
         const validRoutes = await this.filterValidRoutes(
@@ -239,12 +252,46 @@ export class BusRouteService {
               )
               
               const calculatedDistance = distances[0][0].distance
+              const calculationMethod = distances[0][0].method
               totalDistance += calculatedDistance
               
               console.log(
                 `[BusRouteService] Calculated missing distance: ${calculatedDistance.toFixed(3)} km ` +
-                `for segment ${segment.stop_order} using ${distances[0][0].method}`
+                `for segment ${segment.stop_order} using ${calculationMethod}`
               )
+              
+              // Only update database if OSRM was used (not Haversine fallback)
+              if (calculationMethod === 'OSRM') {
+                try {
+                  const { error: updateError } = await this.supabaseClient
+                    .from('route_stops')
+                    .update({ distance_to_next: calculatedDistance })
+                    .eq('bus_id', busId)
+                    .eq('direction', direction)
+                    .eq('stop_order', segment.stop_order)
+                  
+                  if (updateError) {
+                    console.error(
+                      `[BusRouteService] Failed to update distance_to_next in database: ${updateError.message}`
+                    )
+                  } else {
+                    console.log(
+                      `[BusRouteService] Successfully updated distance_to_next in database for ` +
+                      `bus ${busId}, stop_order ${segment.stop_order} (OSRM calculated)`
+                    )
+                  }
+                } catch (updateErr) {
+                  console.error(
+                    `[BusRouteService] Error updating distance_to_next: `,
+                    updateErr instanceof Error ? updateErr.message : String(updateErr)
+                  )
+                }
+              } else {
+                console.log(
+                  `[BusRouteService] Skipping database update for segment ${segment.stop_order} ` +
+                  `(used ${calculationMethod} fallback, not OSRM)`
+                )
+              }
             } catch (calcError) {
               console.error(
                 `[BusRouteService] Failed to calculate distance for segment ${segment.stop_order}: `,
@@ -296,6 +343,8 @@ export class BusRouteService {
     onboardingStopId: string,
     offboardingStopId: string
   ): Promise<BusRoute[]> {
+    console.log('[BusRouteService] filterValidRoutes called with', routes.length, 'route_stops')
+    
     // Group by bus_id and direction
     const grouped = new Map<string, RouteStopWithDetails[]>()
     
@@ -307,6 +356,8 @@ export class BusRouteService {
       grouped.get(key)!.push(route)
     })
     
+    console.log('[BusRouteService] Grouped into', grouped.size, 'bus-direction combinations')
+    
     // Filter routes where onboarding comes before offboarding
     const validRoutes: BusRoute[] = []
     
@@ -314,10 +365,22 @@ export class BusRouteService {
       const onboarding = routeStops.find(r => r.stop_id === onboardingStopId)
       const offboarding = routeStops.find(r => r.stop_id === offboardingStopId)
       
+      console.log(`[BusRouteService] Checking ${key}:`, {
+        hasOnboarding: !!onboarding,
+        hasOffboarding: !!offboarding,
+        onboardingOrder: onboarding?.stop_order,
+        offboardingOrder: offboarding?.stop_order,
+        busName: onboarding?.bus?.name || offboarding?.bus?.name,
+        onboardingBus: onboarding?.bus,
+        onboardingBuses: onboarding?.buses,
+        onboardingKeys: onboarding ? Object.keys(onboarding) : []
+      })
+      
       if (onboarding && offboarding && 
           onboarding.stop_order < offboarding.stop_order &&
-          onboarding.bus && onboarding.stop &&
-          offboarding.stop) {
+          onboarding.buses && onboarding.stops &&
+          offboarding.stops) {
+        console.log(`[BusRouteService] ✓ Valid route found for ${key}`)
         
         // Fetch all stops between onboarding and offboarding for this route
         const { data: allRouteStops, error } = await this.supabaseClient
@@ -330,15 +393,12 @@ export class BusRouteService {
             direction,
             distance_to_next,
             duration_to_next,
-            created_at,
-            updated_at,
             stops (
               id,
               name,
               latitude,
               longitude,
-              accessible,
-              created_at
+              accessible
             )
           `)
           .eq('bus_id', onboarding.bus_id)
@@ -354,9 +414,9 @@ export class BusRouteService {
         
         validRoutes.push({
           busId: onboarding.bus_id,
-          bus: onboarding.bus,
-          onboardingStop: onboarding.stop,
-          offboardingStop: offboarding.stop,
+          bus: onboarding.buses!,  // Use buses (Supabase table name)
+          onboardingStop: onboarding.stops!,  // Use stops (Supabase table name)
+          offboardingStop: offboarding.stops!,  // Use stops (Supabase table name)
           onboardingStopOrder: onboarding.stop_order,
           offboardingStopOrder: offboarding.stop_order,
           direction: onboarding.direction,

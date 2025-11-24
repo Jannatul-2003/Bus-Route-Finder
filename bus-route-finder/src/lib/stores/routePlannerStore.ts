@@ -443,6 +443,10 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
     try {
       const busRouteService = this.#getBusRouteService()
       console.log("[RoutePlannerStore] BusRouteService obtained, finding bus routes...")
+      console.log("[RoutePlannerStore] Stop IDs:", {
+        onboarding: this.#state.selectedOnboardingStop.id,
+        offboarding: this.#state.selectedOffboardingStop.id
+      })
       
       // Find buses that serve both stops (Requirements 4.1, 4.2)
       const busRoutes = await busRouteService.findBusRoutes(
@@ -662,6 +666,28 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
     })
 
     // Re-apply filters to original unfiltered results
+    if (this.#state.allBuses.length > 0) {
+      const filteredAndSorted = this.#applyFiltersAndSort(this.#state.allBuses)
+      this.#setState({ availableBuses: filteredAndSorted })
+    }
+  }
+
+  /**
+   * Clear all filters (AC and coach type)
+   * Resets filters to default state
+   */
+  clearAllFilters(): void {
+    // Clear filter cache
+    this.#filterCache.clear()
+    
+    this.#setState({
+      filters: {
+        isAC: null,
+        coachTypes: []
+      }
+    })
+
+    // Re-apply filters (which are now cleared) to original unfiltered results
     if (this.#state.allBuses.length > 0) {
       const filteredAndSorted = this.#applyFiltersAndSort(this.#state.allBuses)
       this.#setState({ availableBuses: filteredAndSorted })

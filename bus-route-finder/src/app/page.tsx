@@ -896,14 +896,14 @@ export default function RoutePlannerPage() {
         </div>
 
         {/* Bus Results Section (Full Width) */}
-        {state.availableBuses.length > 0 && (
+        {state.allBuses.length > 0 && (
           <div className="mt-8 space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-foreground">
                 🚌 Available Buses
               </h2>
               <p className="text-sm text-muted-foreground">
-                Showing {state.availableBuses.length} bus(es)
+                Showing {state.availableBuses.length} of {state.allBuses.length} bus(es)
               </p>
             </div>
 
@@ -933,20 +933,51 @@ export default function RoutePlannerPage() {
                 <BusCardSkeleton />
                 <BusCardSkeleton />
               </div>
-            ) : (
+            ) : state.availableBuses.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {state.availableBuses.map((bus) => (
                   <BusResultCard key={bus.id} bus={bus} />
                 ))}
               </div>
+            ) : (
+              <Card>
+                <CardContent className="p-12 text-center">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="rounded-full bg-muted p-6">
+                      <svg
+                        className="size-4 text-muted-foreground"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                        />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground mb-2">
+                        No buses match your filters
+                      </h3>
+                      <p className="text-sm text-muted-foreground max-w-md">
+                        {state.allBuses.length} bus(es) found, but none match your current filter settings.
+                        Try adjusting or clearing your filters.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
         )}
 
-        {/* Empty State for Bus Results */}
+        {/* Empty State for No Buses Found (before filtering) */}
         {state.selectedOnboardingStop &&
           state.selectedOffboardingStop &&
-          state.availableBuses.length === 0 &&
+          state.allBuses.length === 0 &&
           !state.loading && (
             <div className="mt-8">
               <Card>
