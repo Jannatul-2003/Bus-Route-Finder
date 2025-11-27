@@ -223,7 +223,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { MapPin, MessageSquare, Settings, Bus, Menu } from "lucide-react";
+import { MapPin, MessageSquare, Settings, Bus, Menu, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -234,6 +234,7 @@ const navItems = [
   { href: "/", label: "Route Planner", icon: MapPin },
   { href: "/buses", label: "Buses", icon: Bus },
   { href: "/reviews", label: "Bus Reviews", icon: MessageSquare },
+  { href: "/community", label: "Community", icon: Users },
   { href: "/bus-management", label: "Bus Management", icon: Bus },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
