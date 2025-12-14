@@ -1,5 +1,6 @@
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { CommunityService } from "@/lib/services/CommunityService"
+import { roleAuthService } from "@/lib/services/RoleAuthorizationService"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(
@@ -16,8 +17,30 @@ export async function POST(
     
     if (authError || !user) {
       return NextResponse.json(
-        { error: "Unauthorized" },
+        { error: "Authentication required" },
         { status: 401 }
+      )
+    }
+
+    // Fetch user profile to get contributor status
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("is_contributor")
+      .eq("id", user.id)
+      .single()
+
+    const authUser = {
+      ...user,
+      is_contributor: profile?.is_contributor || false
+    }
+
+    // Check if user can leave communities
+    const authResult = await roleAuthService.validateApiAccess(authUser, 'leave_community', id)
+    
+    if (!authResult.allowed) {
+      return NextResponse.json(
+        { error: authResult.reason || "Insufficient permissions to leave community" },
+        { status: 403 }
       )
     }
 

@@ -1,5 +1,6 @@
 import { getSupabaseServer } from "@/lib/supabase/server"
 import { CommunityService } from "@/lib/services/CommunityService"
+import { roleAuthService } from "@/lib/services/RoleAuthorizationService"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function GET(request: NextRequest) {
@@ -56,6 +57,38 @@ export async function POST(request: NextRequest) {
     const supabase = await getSupabaseServer()
     const communityService = new CommunityService(supabase)
     
+    // Get current user and check authorization
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      )
+    }
+
+    // Fetch user profile to get contributor status
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("is_contributor")
+      .eq("id", user.id)
+      .single()
+
+    const authUser = {
+      ...user,
+      is_contributor: profile?.is_contributor || false
+    }
+
+    // Check if user can create communities
+    const authResult = await roleAuthService.validateApiAccess(authUser, 'create_community')
+    
+    if (!authResult.allowed) {
+      return NextResponse.json(
+        { error: authResult.reason || "Insufficient permissions to create community" },
+        { status: 403 }
+      )
+    }
+    
     const body = await request.json()
 
     // Validate required fields
@@ -71,7 +104,8 @@ export async function POST(request: NextRequest) {
       description: body.description,
       center_latitude: body.center_latitude,
       center_longitude: body.center_longitude,
-      radius_meters: body.radius_meters
+      radius_meters: body.radius_meters,
+      creator_id: user.id
     })
 
     return NextResponse.json(community, { status: 201 })

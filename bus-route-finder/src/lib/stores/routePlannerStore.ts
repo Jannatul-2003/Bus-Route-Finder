@@ -359,14 +359,17 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
     // Requirement 3.3: Highlight the selection
     // Requirement 3.4: Use the already-calculated distance from the stop discovery
     // The stop.distance field already contains the walking distance in meters
+    // Only set walking distance if we have starting coordinates
+    const walkingDistance = this.#state.fromCoords ? stop.distance : null
+    
     this.#setState({
       selectedOnboardingStop: stop,
-      walkingDistanceToOnboarding: stop.distance, // Already in meters
+      walkingDistanceToOnboarding: walkingDistance,
       loading: false,
       error: null
     })
     
-    console.log("[RoutePlannerStore] Onboarding stop selected, walking distance:", stop.distance, "meters")
+    console.log("[RoutePlannerStore] Onboarding stop selected, walking distance:", walkingDistance, "meters")
   }
 
   /**
@@ -382,14 +385,17 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
     // Highlight the selection
     // Requirement 3.5: Use the already-calculated distance from the stop discovery
     // The stop.distance field already contains the walking distance in meters
+    // Only set walking distance if we have destination coordinates
+    const walkingDistance = this.#state.toCoords ? stop.distance : null
+    
     this.#setState({
       selectedOffboardingStop: stop,
-      walkingDistanceFromOffboarding: stop.distance, // Already in meters
+      walkingDistanceFromOffboarding: walkingDistance,
       loading: false,
       error: null
     })
     
-    console.log("[RoutePlannerStore] Offboarding stop selected, walking distance:", stop.distance, "meters")
+    console.log("[RoutePlannerStore] Offboarding stop selected, walking distance:", walkingDistance, "meters")
     
     // Requirement 3.6: Both stops are now selected, bus route search can be enabled
     // The UI can check if both selectedOnboardingStop and selectedOffboardingStop are non-null
@@ -511,12 +517,12 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
           ...decoratedResult,
           status: route.bus.status,
           routeStops: route.routeStops.map(rs => ({
-            id: rs.stop?.id || '',
-            name: rs.stop?.name || '',
-            latitude: rs.stop?.latitude || 0,
-            longitude: rs.stop?.longitude || 0,
-            accessible: rs.stop?.accessible || false,
-            created_at: rs.stop?.created_at || '',
+            id: (rs as any).stops?.id || rs.stops?.id || '',
+            name: (rs as any).stops?.name || rs.stops?.name || '',
+            latitude: (rs as any).stops?.latitude || rs.stops?.latitude || 0,
+            longitude: (rs as any).stops?.longitude || rs.stops?.longitude || 0,
+            accessible: (rs as any).stops?.accessible || rs.stops?.accessible || false,
+            created_at: (rs as any).stops?.created_at || rs.stops?.created_at || '',
             distance: 0, // Distance from reference point not applicable here
             distanceMethod: 'OSRM' as const
           }))

@@ -105,15 +105,15 @@ export class BusRouteService {
         }
         
         console.log('[BusRouteService] Found route_stops:', routes.map(r => ({
-          bus: r.buses?.name,
-          stop: r.stops?.name,
+          bus: (r as any).buses?.name || 'Unknown',
+          stop: (r as any).stops?.name || 'Unknown',
           stop_order: r.stop_order,
           direction: r.direction
         })))
         
         // Filter for valid routes where onboarding comes before offboarding
         const validRoutes = await this.filterValidRoutes(
-          routes as RouteStopWithDetails[],
+          routes as unknown as RouteStopWithDetails[],
           onboardingStopId,
           offboardingStopId
         )
@@ -370,8 +370,8 @@ export class BusRouteService {
         hasOffboarding: !!offboarding,
         onboardingOrder: onboarding?.stop_order,
         offboardingOrder: offboarding?.stop_order,
-        busName: onboarding?.bus?.name || offboarding?.bus?.name,
-        onboardingBus: onboarding?.bus,
+        busName: (onboarding as any)?.buses?.name || (offboarding as any)?.buses?.name,
+        onboardingBus: (onboarding as any)?.buses,
         onboardingBuses: onboarding?.buses,
         onboardingKeys: onboarding ? Object.keys(onboarding) : []
       })
@@ -420,7 +420,7 @@ export class BusRouteService {
           onboardingStopOrder: onboarding.stop_order,
           offboardingStopOrder: offboarding.stop_order,
           direction: onboarding.direction,
-          routeStops: (allRouteStops || []) as RouteStopWithDetails[]
+          routeStops: (allRouteStops || []) as unknown as RouteStopWithDetails[]
         })
       }
     }

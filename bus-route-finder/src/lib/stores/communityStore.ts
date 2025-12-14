@@ -1,6 +1,8 @@
 "use client"
 
 import { Observable } from "@/lib/observer"
+import { searchService } from "@/lib/services/SearchService"
+import { communityService } from "@/lib/services/CommunityService"
 import type {
   Community,
   CommunityMember,
@@ -23,15 +25,54 @@ export interface CommunityState {
   selectedCommunity: Community | null
   userCommunities: Community[]
   
+  // Search State
+  searchState: {
+    query: string
+    radius: number
+    isRadiusSet: boolean
+    filteredCommunities: CommunityWithDistance[]
+    isSearching: boolean
+    searchError: string | null
+    hasSearchBeenPerformed: boolean
+  }
+  
   // Members
   communityMembers: MemberWithUser[]
+  
+  // Membership State Management
+  membershipState: {
+    [communityId: string]: {
+      isMember: boolean
+      loading: boolean
+      lastChecked: number
+    }
+  }
   
   // Posts
   posts: PostWithAuthor[]
   selectedPost: PostWithAuthor | null
   postFilters: {
+    keyword: string
     postType: PostType | null
-    status: PostStatus | null
+    status: PostStatus | 'all' | null
+  }
+  filteredPosts: PostWithAuthor[]
+  
+  // Post Navigation State (Requirements 1.1, 1.2, 1.3)
+  postNavigation: {
+    selectedPostId: string | null
+    showPostDetail: boolean
+    previousRoute: string | null
+    navigationHistory: Array<{
+      communityId: string
+      communityName: string
+      postId?: string
+      postTitle?: string
+      timestamp: number
+      isSlugBased?: boolean
+      communitySlug?: string
+      postSlug?: string
+    }>
   }
   
   // Comments
@@ -53,12 +94,30 @@ const initialState: CommunityState = {
   communities: [],
   selectedCommunity: null,
   userCommunities: [],
+  searchState: {
+    query: '',
+    radius: 5000,
+    isRadiusSet: false,
+    filteredCommunities: [],
+    isSearching: false,
+    searchError: null,
+    hasSearchBeenPerformed: false
+  },
   communityMembers: [],
+  membershipState: {},
   posts: [],
   selectedPost: null,
   postFilters: {
+    keyword: '',
     postType: null,
     status: 'active'
+  },
+  filteredPosts: [],
+  postNavigation: {
+    selectedPostId: null,
+    showPostDetail: false,
+    previousRoute: null,
+    navigationHistory: []
   },
   comments: [],
   notifications: [],
@@ -95,7 +154,15 @@ class CommunityStore extends Observable<CommunityState> {
       }
 
       const communities = await response.json()
-      this.#setState({ communities, loading: false })
+      this.#setState({ 
+        communities, 
+        loading: false,
+        searchState: {
+          ...this.#state.searchState,
+          filteredCommunities: this.#filterCommunitiesByQuery(communities, this.#state.searchState.query),
+          hasSearchBeenPerformed: true
+        }
+      })
     } catch (error) {
       this.#setState({
         loading: false,
@@ -201,13 +268,235 @@ class CommunityStore extends Observable<CommunityState> {
     }
   }
 
+  // ==================== SEARCH FUNCTIONALITY ====================
+
+  /**
+   * Set search query and filter communities in real-time
+   * Requirements: 2.1, 2.2, 2.3 - Real-time filtering as user types
+   * Note: This only updates the query, hasSearchBeenPerformed is set when actual search is performed
+   */
+  setSearchQuery(query: string): void {
+    const filteredCommunities = this.#filterCommunitiesByQuery(this.#state.communities, query)
+    
+    this.#setState({
+      searchState: {
+        ...this.#state.searchState,
+        query,
+        filteredCommunities,
+        // Don't set hasSearchBeenPerformed here - only when search is actually performed
+      }
+    })
+  }
+
+  /**
+   * Set search radius and update radius set status
+   * Requirements: 3.2, 3.3 - Conditional data fetching based on radius input
+   */
+  setSearchRadius(radius: number): void {
+    this.#setState({
+      searchState: {
+        ...this.#state.searchState,
+        radius,
+        isRadiusSet: radius > 0
+      }
+    })
+  }
+
+  /**
+   * Fetch communities only when radius is set
+   * Requirements: 3.2, 3.3 - Don't fetch data until radius is provided
+   */
+  async fetchCommunitiesIfRadiusSet(latitude: number, longitude: number): Promise<void> {
+    if (!this.#state.searchState.isRadiusSet) {
+      return
+    }
+
+    await this.fetchNearbyCommunities(latitude, longitude, this.#state.searchState.radius)
+  }
+
+  /**
+   * Get filtered communities for display
+   * Requirements: 2.4 - Display all communities when search is empty
+   */
+  getFilteredCommunities(): CommunityWithDistance[] {
+    return this.#state.searchState.query.trim() 
+      ? this.#state.searchState.filteredCommunities 
+      : this.#state.communities
+  }
+
+  /**
+   * Clear search state
+   */
+  clearSearch(): void {
+    this.#setState({
+      searchState: {
+        ...this.#state.searchState,
+        query: '',
+        filteredCommunities: this.#state.communities,
+        searchError: null,
+        hasSearchBeenPerformed: false
+      }
+    })
+  }
+
+  /**
+   * Perform name-based search and set hasSearchBeenPerformed flag
+   * Requirements: 1.3 - Only show empty results message after search is performed
+   */
+  async performNameSearch(): Promise<void> {
+    if (!this.#state.searchState.query.trim()) {
+      return
+    }
+
+    this.#setState({
+      searchState: {
+        ...this.#state.searchState,
+        isSearching: true,
+        searchError: null
+      }
+    })
+
+    try {
+      const response = await fetch(`/api/communities/search?name=${encodeURIComponent(this.#state.searchState.query)}`)
+      if (response.ok) {
+        const communities = await response.json()
+        this.#setState({
+          communities,
+          searchState: {
+            ...this.#state.searchState,
+            filteredCommunities: communities,
+            hasSearchBeenPerformed: true,
+            isSearching: false
+          }
+        })
+      } else {
+        throw new Error('Failed to search communities')
+      }
+    } catch (error) {
+      this.#setState({
+        searchState: {
+          ...this.#state.searchState,
+          searchError: error instanceof Error ? error.message : 'Search failed',
+          hasSearchBeenPerformed: true,
+          isSearching: false
+        }
+      })
+    }
+  }
+
+  /**
+   * Private helper to filter communities by search query
+   */
+  #filterCommunitiesByQuery(communities: CommunityWithDistance[], query: string): CommunityWithDistance[] {
+    return searchService.searchCommunitiesByName(query, communities)
+  }
+
   // ==================== COMMUNITY MEMBERS ====================
+
+  /**
+   * Get membership status for a community with caching
+   * Requirements: 6.1, 6.4, 6.5 - Proper membership state management
+   */
+  async getMembershipStatus(communityId: string, userId: string): Promise<boolean> {
+    const now = Date.now()
+    const cached = this.#state.membershipState[communityId]
+    
+    // Use cached result if it's less than 30 seconds old
+    if (cached && (now - cached.lastChecked) < 30000) {
+      return cached.isMember
+    }
+
+    // Set loading state
+    this.#setState({
+      membershipState: {
+        ...this.#state.membershipState,
+        [communityId]: {
+          isMember: cached?.isMember || false,
+          loading: true,
+          lastChecked: now
+        }
+      }
+    })
+
+    try {
+      const response = await fetch(`/api/communities/${communityId}/members`)
+      if (!response.ok) {
+        throw new Error('Failed to fetch membership status')
+      }
+
+      const members = await response.json()
+      const isMember = members.some((member: any) => member.user_id === userId)
+
+      // Update membership state
+      this.#setState({
+        membershipState: {
+          ...this.#state.membershipState,
+          [communityId]: {
+            isMember,
+            loading: false,
+            lastChecked: now
+          }
+        }
+      })
+
+      return isMember
+    } catch (error) {
+      // Update with error state
+      this.#setState({
+        membershipState: {
+          ...this.#state.membershipState,
+          [communityId]: {
+            isMember: cached?.isMember || false,
+            loading: false,
+            lastChecked: now
+          }
+        }
+      })
+      return cached?.isMember || false
+    }
+  }
+
+  /**
+   * Get cached membership status without making API call
+   */
+  getCachedMembershipStatus(communityId: string): { isMember: boolean; loading: boolean } | null {
+    const cached = this.#state.membershipState[communityId]
+    return cached ? { isMember: cached.isMember, loading: cached.loading } : null
+  }
+
+  /**
+   * Update membership status in cache
+   */
+  private updateMembershipStatus(communityId: string, isMember: boolean): void {
+    this.#setState({
+      membershipState: {
+        ...this.#state.membershipState,
+        [communityId]: {
+          isMember,
+          loading: false,
+          lastChecked: Date.now()
+        }
+      }
+    })
+  }
 
   async joinCommunity(
     communityId: string,
     notificationPreferences?: NotificationPreferences
   ): Promise<void> {
-    this.#setState({ loading: true, error: null })
+    // Set loading state for this specific community
+    this.#setState({
+      loading: true,
+      error: null,
+      membershipState: {
+        ...this.#state.membershipState,
+        [communityId]: {
+          isMember: this.#state.membershipState[communityId]?.isMember || false,
+          loading: true,
+          lastChecked: Date.now()
+        }
+      }
+    })
 
     try {
       const response = await fetch(`/api/communities/${communityId}/join`, {
@@ -220,19 +509,46 @@ class CommunityStore extends Observable<CommunityState> {
         throw new Error('Failed to join community')
       }
 
+      // Update membership status immediately
+      this.updateMembershipStatus(communityId, true)
+
       // Refresh community data to update member count
       await this.fetchCommunityById(communityId)
+      
+      // Refresh user communities list
       this.#setState({ loading: false })
     } catch (error) {
+      // Reset loading state on error, preserve original membership state
+      const originalMembershipState = this.#state.membershipState[communityId]?.isMember || false
       this.#setState({
         loading: false,
-        error: error instanceof Error ? error.message : 'Failed to join community'
+        error: error instanceof Error ? error.message : 'Failed to join community',
+        membershipState: {
+          ...this.#state.membershipState,
+          [communityId]: {
+            isMember: originalMembershipState,
+            loading: false,
+            lastChecked: Date.now()
+          }
+        }
       })
     }
   }
 
   async leaveCommunity(communityId: string): Promise<void> {
-    this.#setState({ loading: true, error: null })
+    // Set loading state for this specific community
+    this.#setState({
+      loading: true,
+      error: null,
+      membershipState: {
+        ...this.#state.membershipState,
+        [communityId]: {
+          isMember: this.#state.membershipState[communityId]?.isMember || true,
+          loading: true,
+          lastChecked: Date.now()
+        }
+      }
+    })
 
     try {
       const response = await fetch(`/api/communities/${communityId}/leave`, {
@@ -243,13 +559,28 @@ class CommunityStore extends Observable<CommunityState> {
         throw new Error('Failed to leave community')
       }
 
+      // Update membership status immediately
+      this.updateMembershipStatus(communityId, false)
+
       // Refresh community data to update member count
       await this.fetchCommunityById(communityId)
+      
+      // Note: Posts are preserved as per requirements 6.4
       this.#setState({ loading: false })
     } catch (error) {
+      // Reset loading state on error, preserve original membership state
+      const originalMembershipState = this.#state.membershipState[communityId]?.isMember || true
       this.#setState({
         loading: false,
-        error: error instanceof Error ? error.message : 'Failed to leave community'
+        error: error instanceof Error ? error.message : 'Failed to leave community',
+        membershipState: {
+          ...this.#state.membershipState,
+          [communityId]: {
+            isMember: originalMembershipState,
+            loading: false,
+            lastChecked: Date.now()
+          }
+        }
       })
     }
   }
@@ -285,7 +616,25 @@ class CommunityStore extends Observable<CommunityState> {
       }
 
       const communities = await response.json()
-      this.#setState({ userCommunities: communities, loading: false })
+      
+      // Update membership status for all user communities
+      const membershipUpdates: { [key: string]: any } = {}
+      communities.forEach((community: Community) => {
+        membershipUpdates[community.id] = {
+          isMember: true, // User is definitely a member of these communities
+          loading: false,
+          lastChecked: Date.now()
+        }
+      })
+
+      this.#setState({ 
+        userCommunities: communities, 
+        loading: false,
+        membershipState: {
+          ...this.#state.membershipState,
+          ...membershipUpdates
+        }
+      })
     } catch (error) {
       this.#setState({
         loading: false,
@@ -323,7 +672,8 @@ class CommunityStore extends Observable<CommunityState> {
       }
 
       const posts = await response.json()
-      this.#setState({ posts, loading: false })
+      const filteredPosts = this.#filterPosts(posts, this.#state.postFilters)
+      this.#setState({ posts, filteredPosts, loading: false })
     } catch (error) {
       this.#setState({
         loading: false,
@@ -352,6 +702,34 @@ class CommunityStore extends Observable<CommunityState> {
     }
   }
 
+  /**
+   * Validate membership before post creation
+   * Requirements: 6.2, 6.3 - Handle membership validation for post creation
+   */
+  async validateMembershipForPostCreation(communityId: string, userId: string): Promise<{
+    canCreate: boolean
+    reason?: string
+  }> {
+    try {
+      // Check current membership status
+      const isMember = await this.getMembershipStatus(communityId, userId)
+      
+      if (!isMember) {
+        return {
+          canCreate: false,
+          reason: 'You must be a member of this community to create posts'
+        }
+      }
+
+      return { canCreate: true }
+    } catch (error) {
+      return {
+        canCreate: false,
+        reason: 'Unable to verify membership status'
+      }
+    }
+  }
+
   async createPost(communityId: string, data: {
     post_type: PostType
     title: string
@@ -362,18 +740,37 @@ class CommunityStore extends Observable<CommunityState> {
     location_latitude?: number
     location_longitude?: number
     bus_id?: string
-  }): Promise<PostWithAuthor | null> {
+  }, userId?: string): Promise<PostWithAuthor | null> {
     this.#setState({ loading: true, error: null })
 
     try {
+      // Get current user from auth if userId not provided
+      let currentUserId = userId
+      if (!currentUserId) {
+        throw new Error('User ID is required to create a post')
+      }
+
+      // Validate membership if userId is provided
+      const validation = await this.validateMembershipForPostCreation(communityId, currentUserId)
+      if (!validation.canCreate) {
+        throw new Error(validation.reason || 'Cannot create post')
+      }
+
+      // Include author_id in the request body
+      const requestBody = {
+        ...data,
+        author_id: currentUserId
+      }
+
       const response = await fetch(`/api/communities/${communityId}/posts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {
-        throw new Error('Failed to create post')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to create post')
       }
 
       const post = await response.json()
@@ -450,13 +847,78 @@ class CommunityStore extends Observable<CommunityState> {
     }
   }
 
-  setPostFilters(filters: { postType?: PostType | null; status?: PostStatus | null }): void {
+  setPostFilters(filters: { 
+    keyword?: string
+    postType?: PostType | null
+    status?: PostStatus | 'all' | null 
+  }): void {
+    const newFilters = {
+      keyword: filters.keyword !== undefined ? filters.keyword : this.#state.postFilters.keyword,
+      postType: filters.postType !== undefined ? filters.postType : this.#state.postFilters.postType,
+      status: filters.status !== undefined ? filters.status : this.#state.postFilters.status
+    }
+
+    const filteredPosts = this.#filterPosts(this.#state.posts, newFilters)
+
     this.#setState({
-      postFilters: {
-        postType: filters.postType !== undefined ? filters.postType : this.#state.postFilters.postType,
-        status: filters.status !== undefined ? filters.status : this.#state.postFilters.status
-      }
+      postFilters: newFilters,
+      filteredPosts
     })
+  }
+
+  /**
+   * Set post keyword search query and filter posts in real-time
+   * Requirements: 2.1 (extended to posts) - Real-time filtering as user types
+   */
+  setPostSearchKeyword(keyword: string): void {
+    const newFilters = {
+      ...this.#state.postFilters,
+      keyword
+    }
+
+    const filteredPosts = this.#filterPosts(this.#state.posts, newFilters)
+
+    this.#setState({
+      postFilters: newFilters,
+      filteredPosts
+    })
+  }
+
+  /**
+   * Get filtered posts for display
+   * Returns filtered posts based on current filters, with proper handling of "active" default and "all" status
+   */
+  getFilteredPosts(): PostWithAuthor[] {
+    // Always apply filtering to ensure proper status filtering behavior
+    return this.#state.filteredPosts
+  }
+
+  /**
+   * Clear post search and filters
+   */
+  clearPostSearch(): void {
+    const defaultFilters = {
+      keyword: '',
+      postType: null,
+      status: 'active' as const
+    }
+    const filteredPosts = this.#filterPosts(this.#state.posts, defaultFilters)
+    
+    this.#setState({
+      postFilters: defaultFilters,
+      filteredPosts
+    })
+  }
+
+  /**
+   * Private helper to filter posts using SearchService
+   */
+  #filterPosts(posts: PostWithAuthor[], filters: {
+    keyword: string
+    postType: PostType | null
+    status: PostStatus | 'all' | null
+  }): PostWithAuthor[] {
+    return searchService.filterPosts(posts, filters)
   }
 
   // ==================== POST COMMENTS ====================
@@ -740,7 +1202,221 @@ class CommunityStore extends Observable<CommunityState> {
     }
   }
 
+  // ==================== POST NAVIGATION ====================
+
+  /**
+   * Navigate to post detail view with proper state management
+   * Requirements: 1.1, 1.2, 1.3 - Enhanced post navigation with slug-based routing
+   */
+  navigateToPost(
+    communityId: string, 
+    postId: string, 
+    options?: {
+      communityName?: string
+      postTitle?: string
+      previousRoute?: string
+      isSlugBased?: boolean
+      communitySlug?: string
+      postSlug?: string
+    }
+  ): void {
+    const navigationEntry = {
+      communityId,
+      communityName: options?.communityName || this.#state.selectedCommunity?.name || 'Unknown Community',
+      postId,
+      postTitle: options?.postTitle || 'Post',
+      timestamp: Date.now(),
+      // Enhanced with slug information
+      isSlugBased: options?.isSlugBased || false,
+      communitySlug: options?.communitySlug,
+      postSlug: options?.postSlug
+    }
+
+    // Update navigation history (keep last 10 entries, remove duplicates)
+    const existingHistory = this.#state.postNavigation.navigationHistory.filter(
+      entry => entry.postId !== postId // Remove any existing entry for this post
+    )
+    const updatedHistory = [
+      navigationEntry,
+      ...existingHistory.slice(0, 9)
+    ]
+
+    // Determine the correct previous route - always use slug-based URLs (Requirements 4.2, 4.3)
+    let previousRoute = options?.previousRoute
+    if (!previousRoute) {
+      if (options?.isSlugBased && options?.communitySlug) {
+        previousRoute = `/community/c/${options.communitySlug}`
+      } else if (this.#state.selectedCommunity) {
+        // Generate slug-based URL from community name
+        const communitySlug = this.#generateCommunitySlug(this.#state.selectedCommunity.name)
+        previousRoute = `/community/c/${communitySlug}`
+      } else {
+        // Fallback to community list
+        previousRoute = '/community'
+      }
+    }
+
+    this.#setState({
+      postNavigation: {
+        selectedPostId: postId,
+        showPostDetail: true,
+        previousRoute,
+        navigationHistory: updatedHistory
+      }
+    })
+  }
+
+  /**
+   * Navigate back from post detail view
+   * Requirements: 4.2, 4.3 - Always return slug-based URLs for back navigation
+   */
+  navigateBackFromPost(): string {
+    const previousRoute = this.#state.postNavigation.previousRoute
+    
+    this.#setState({
+      postNavigation: {
+        ...this.#state.postNavigation,
+        selectedPostId: null,
+        showPostDetail: false
+      }
+    })
+
+    // If we have a previous route and it's already slug-based, use it
+    if (previousRoute && previousRoute.includes('/community/c/')) {
+      return previousRoute
+    }
+
+    // If we have a selected community, generate slug-based URL
+    if (this.#state.selectedCommunity) {
+      const communitySlug = this.#generateCommunitySlug(this.#state.selectedCommunity.name)
+      return `/community/c/${communitySlug}`
+    }
+
+    // Fallback to community list
+    return '/community'
+  }
+
+  /**
+   * Get navigation breadcrumbs for current post
+   * Requirements: 4.2, 4.3 - Always use slug-based URLs for breadcrumbs
+   */
+  getPostNavigationBreadcrumbs(): Array<{
+    label: string
+    href: string
+    isActive: boolean
+  }> {
+    const breadcrumbs = []
+    const currentNavigation = this.#state.postNavigation
+
+    // Add community breadcrumb - always use slug-based URLs
+    if (this.#state.selectedCommunity) {
+      // Check if we have slug information from navigation history
+      const latestNavEntry = currentNavigation.navigationHistory[0]
+      let communityHref: string
+      
+      if (latestNavEntry?.isSlugBased && latestNavEntry.communitySlug) {
+        // Use slug-based URL if available
+        communityHref = `/community/c/${latestNavEntry.communitySlug}`
+      } else {
+        // Generate slug from community name - always use slug-based URLs
+        const communitySlug = this.#generateCommunitySlug(this.#state.selectedCommunity.name)
+        communityHref = `/community/c/${communitySlug}`
+      }
+      
+      breadcrumbs.push({
+        label: this.#state.selectedCommunity.name,
+        href: communityHref,
+        isActive: false
+      })
+    }
+
+    // Add post breadcrumb if viewing post detail
+    if (currentNavigation.showPostDetail && this.#state.selectedPost) {
+      breadcrumbs.push({
+        label: this.#state.selectedPost.title,
+        href: `#`, // Current page
+        isActive: true
+      })
+    }
+
+    return breadcrumbs
+  }
+
+  /**
+   * Get recent navigation history for quick access
+   * Requirements: 1.1, 1.2 - Enhanced user experience with slug-based navigation history
+   */
+  getRecentPostHistory(limit: number = 5): Array<{
+    communityId: string
+    communityName: string
+    postId: string
+    postTitle: string
+    href: string
+    timestamp: number
+  }> {
+    return this.#state.postNavigation.navigationHistory
+      .filter(entry => entry.postId) // Only include post entries
+      .slice(0, limit)
+      .map(entry => {
+        // Always generate slug-based URLs (Requirements 4.2, 4.3)
+        let href: string
+        if (entry.isSlugBased && entry.communitySlug && entry.postSlug) {
+          href = `/community/c/${entry.communitySlug}/post/p/${entry.postSlug}`
+        } else {
+          // Generate slug-based URL from available data
+          const communitySlug = entry.communitySlug || this.#generateCommunitySlug(entry.communityName)
+          const postSlug = entry.postSlug || this.#generatePostSlug(entry.postTitle || 'untitled-post')
+          href = `/community/c/${communitySlug}/post/p/${postSlug}`
+        }
+        
+        return {
+          ...entry,
+          postId: entry.postId!,
+          postTitle: entry.postTitle!,
+          href
+        }
+      })
+  }
+
+  /**
+   * Clear navigation history
+   */
+  clearNavigationHistory(): void {
+    this.#setState({
+      postNavigation: {
+        ...this.#state.postNavigation,
+        navigationHistory: []
+      }
+    })
+  }
+
   // ==================== UTILITY ====================
+
+  /**
+   * Generate slug from community name
+   * Requirements: 4.2, 4.3 - Consistent slug generation for URLs
+   */
+  #generateCommunitySlug(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single
+      .trim()
+  }
+
+  /**
+   * Generate slug from post title
+   * Requirements: 4.2, 4.3 - Consistent slug generation for URLs
+   */
+  #generatePostSlug(title: string): string {
+    return title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single
+      .trim()
+  }
 
   clearError(): void {
     this.#setState({ error: null })
@@ -754,6 +1430,11 @@ class CommunityStore extends Observable<CommunityState> {
   #setState(partial: Partial<CommunityState>): void {
     this.#state = { ...this.#state, ...partial }
     this.notify(this.#state)
+  }
+
+  // Public setState method for external updates
+  setState(partial: Partial<CommunityState>): void {
+    this.#setState(partial)
   }
 }
 

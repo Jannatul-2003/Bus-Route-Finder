@@ -11,20 +11,35 @@ export async function GET(
     const supabase = await getSupabaseServer()
     const communityService = new CommunityService(supabase)
 
+    // Validate UUID format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    if (!uuidRegex.test(id)) {
+      return NextResponse.json(
+        { error: "Invalid community ID format. Expected UUID format." },
+        { status: 400 }
+      )
+    }
+
     const community = await communityService.getCommunityById(id)
 
     if (!community) {
       return NextResponse.json(
-        { error: "Community not found" },
+        { error: "Community not found. Please check the community ID and try again." },
         { status: 404 }
       )
     }
 
-    return NextResponse.json(community)
+    // Add the slug to the response for consistency
+    const communityWithSlug = {
+      ...community,
+      slug: communityService.getCommunitySlug(community)
+    }
+
+    return NextResponse.json(communityWithSlug)
   } catch (error) {
     console.error("Error fetching community:", error)
     return NextResponse.json(
-      { error: "Failed to fetch community" },
+      { error: "Failed to fetch community. Please try again later." },
       { status: 500 }
     )
   }

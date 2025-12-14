@@ -43,6 +43,7 @@ export interface CommunityPost {
   post_type: PostType
   title: string
   content: string
+  slug: string | null
   item_category: ItemCategory | null
   item_description: string | null
   photo_url: string | null

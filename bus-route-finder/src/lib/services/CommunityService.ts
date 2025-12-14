@@ -29,7 +29,7 @@ export class CommunityService {
   // ==================== COMMUNITIES ====================
 
   /**
-   * Create a new community
+   * Create a new community and automatically add creator as member
    */
   async createCommunity(data: {
     name: string
@@ -37,6 +37,7 @@ export class CommunityService {
     center_latitude: number
     center_longitude: number
     radius_meters?: number
+    creator_id?: string
   }): Promise<Community> {
     const { data: community, error } = await this.supabaseClient
       .from('communities')
@@ -52,6 +53,22 @@ export class CommunityService {
 
     if (error) {
       throw new Error(`Failed to create community: ${error.message}`)
+    }
+
+    // Automatically add creator as member if creator_id is provided
+    if (data.creator_id) {
+      try {
+        await this.joinCommunity(community.id, data.creator_id, {
+          new_posts: true,
+          lost_items: true,
+          delays: true,
+          emergencies: true
+        })
+      } catch (membershipError) {
+        // If membership creation fails, we should still return the community
+        // but log the error for debugging
+        console.error('Failed to add creator as member:', membershipError)
+      }
     }
 
     return community
@@ -253,13 +270,7 @@ export class CommunityService {
   async getMembersByCommunity(communityId: string): Promise<MemberWithUser[]> {
     const { data, error } = await this.supabaseClient
       .from('community_members')
-      .select(`
-        *,
-        user:user_id (
-          id,
-          email
-        )
-      `)
+      .select('*')
       .eq('community_id', communityId)
       .order('joined_at', { ascending: false })
 
@@ -267,37 +278,48 @@ export class CommunityService {
       throw new Error(`Failed to fetch community members: ${error.message}`)
     }
 
-    return data || []
+    // For now, return the data without user details since auth.users is not directly accessible
+    // You might want to create a profiles table or use RPC functions for user details
+    return (data || []).map(member => ({
+      ...member,
+      user: {
+        id: member.user_id,
+        email: null // Will need to be populated separately if needed
+      }
+    }))
   }
 
   /**
    * Get communities a user is a member of
    */
   async getCommunitiesByUser(userId: string): Promise<Community[]> {
-    const { data, error } = await this.supabaseClient
+    // First get the community IDs the user is a member of
+    const { data: memberData, error: memberError } = await this.supabaseClient
       .from('community_members')
-      .select(`
-        communities (
-          id,
-          name,
-          description,
-          center_latitude,
-          center_longitude,
-          radius_meters,
-          member_count,
-          post_count,
-          created_at,
-          updated_at
-        )
-      `)
+      .select('community_id')
       .eq('user_id', userId)
       .order('joined_at', { ascending: false })
 
-    if (error) {
-      throw new Error(`Failed to fetch user communities: ${error.message}`)
+    if (memberError) {
+      throw new Error(`Failed to fetch user communities: ${memberError.message}`)
     }
 
-    return (data?.map((item: any) => item.communities).filter(Boolean) || []) as Community[]
+    if (!memberData || memberData.length === 0) {
+      return []
+    }
+
+    // Then get the community details
+    const communityIds = memberData.map(m => m.community_id)
+    const { data: communities, error: communityError } = await this.supabaseClient
+      .from('communities')
+      .select('*')
+      .in('id', communityIds)
+
+    if (communityError) {
+      throw new Error(`Failed to fetch community details: ${communityError.message}`)
+    }
+
+    return communities || []
   }
 
   /**
@@ -340,6 +362,7 @@ export class CommunityService {
     location_latitude?: number
     location_longitude?: number
     bus_id?: string
+    slug?: string
   }): Promise<CommunityPost> {
     const { data: post, error } = await this.supabaseClient
       .from('community_posts')
@@ -349,6 +372,7 @@ export class CommunityService {
         post_type: data.post_type,
         title: data.title,
         content: data.content,
+        slug: data.slug || null, // Let database trigger generate if not provided
         item_category: data.item_category || null,
         item_description: data.item_description || null,
         photo_url: data.photo_url || null,
@@ -424,11 +448,7 @@ export class CommunityService {
       .from('community_posts')
       .select(`
         *,
-        author:author_id (
-          id,
-          email
-        ),
-        bus:bus_id (
+        buses:bus_id (
           id,
           name
         )
@@ -459,7 +479,19 @@ export class CommunityService {
       throw new Error(`Failed to fetch community posts: ${error.message}`)
     }
 
-    return data || []
+    // Map the data to include author and bus information
+    return (data || []).map((post: any) => ({
+      ...post,
+      author: {
+        id: post.author_id,
+        email: null // Will need to be populated separately if needed
+      },
+      bus: post.buses ? {
+        id: post.buses.id,
+        name: post.buses.name
+      } : null,
+      buses: undefined // Remove the raw buses field
+    }))
   }
 
   /**
@@ -468,17 +500,7 @@ export class CommunityService {
   async getPostsByUser(userId: string): Promise<PostWithAuthor[]> {
     const { data, error } = await this.supabaseClient
       .from('community_posts')
-      .select(`
-        *,
-        author:author_id (
-          id,
-          email
-        ),
-        bus:bus_id (
-          id,
-          name
-        )
-      `)
+      .select('*')
       .eq('author_id', userId)
       .order('created_at', { ascending: false })
 
@@ -486,7 +508,17 @@ export class CommunityService {
       throw new Error(`Failed to fetch user posts: ${error.message}`)
     }
 
-    return data || []
+    return (data || []).map(post => ({
+      ...post,
+      author: {
+        id: post.author_id,
+        email: null
+      },
+      bus: post.bus_id ? {
+        id: post.bus_id,
+        name: null
+      } : null
+    }))
   }
 
   /**
@@ -495,17 +527,7 @@ export class CommunityService {
   async getPostsByBus(busId: string): Promise<PostWithAuthor[]> {
     const { data, error } = await this.supabaseClient
       .from('community_posts')
-      .select(`
-        *,
-        author:author_id (
-          id,
-          email
-        ),
-        bus:bus_id (
-          id,
-          name
-        )
-      `)
+      .select('*')
       .eq('bus_id', busId)
       .order('created_at', { ascending: false })
 
@@ -513,7 +535,17 @@ export class CommunityService {
       throw new Error(`Failed to fetch bus posts: ${error.message}`)
     }
 
-    return data || []
+    return (data || []).map(post => ({
+      ...post,
+      author: {
+        id: post.author_id,
+        email: null
+      },
+      bus: post.bus_id ? {
+        id: post.bus_id,
+        name: null
+      } : null
+    }))
   }
 
   /**
@@ -524,11 +556,7 @@ export class CommunityService {
       .from('community_posts')
       .select(`
         *,
-        author:author_id (
-          id,
-          email
-        ),
-        bus:bus_id (
+        buses:bus_id (
           id,
           name
         )
@@ -543,7 +571,111 @@ export class CommunityService {
       throw new Error(`Failed to fetch post: ${error.message}`)
     }
 
-    return data
+    if (!data) return null
+
+    return {
+      ...data,
+      author: {
+        id: data.author_id,
+        email: null
+      },
+      bus: data.buses ? {
+        id: data.buses.id,
+        name: data.buses.name
+      } : null,
+      buses: undefined // Remove the raw buses field
+    }
+  }
+
+  /**
+   * Get a single post by slug within a community
+   */
+  async getPostBySlug(communityId: string, postSlug: string): Promise<PostWithAuthor | null> {
+    const { data, error } = await this.supabaseClient
+      .from('community_posts')
+      .select(`
+        *,
+        buses:bus_id (
+          id,
+          name
+        )
+      `)
+      .eq('community_id', communityId)
+      .eq('slug', postSlug)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null
+      }
+      throw new Error(`Failed to fetch post by slug: ${error.message}`)
+    }
+
+    if (!data) return null
+
+    return {
+      ...data,
+      author: {
+        id: data.author_id,
+        email: null
+      },
+      bus: data.buses ? {
+        id: data.buses.id,
+        name: data.buses.name
+      } : null,
+      buses: undefined // Remove the raw buses field
+    }
+  }
+
+  /**
+   * Check if a slug is unique within a community
+   */
+  async isSlugUniqueInCommunity(
+    communityId: string, 
+    slug: string, 
+    excludePostId?: string
+  ): Promise<boolean> {
+    let query = this.supabaseClient
+      .from('community_posts')
+      .select('id')
+      .eq('community_id', communityId)
+      .eq('slug', slug)
+
+    if (excludePostId) {
+      query = query.neq('id', excludePostId)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      throw new Error(`Failed to check slug uniqueness: ${error.message}`)
+    }
+
+    return !data || data.length === 0
+  }
+
+  /**
+   * Generate a unique slug for a post within a community
+   */
+  async generateUniquePostSlug(
+    communityId: string, 
+    title: string, 
+    excludePostId?: string
+  ): Promise<string> {
+    // Import the slug generation function
+    const { generatePostSlug } = await import('@/lib/utils/slugs')
+    
+    const baseSlug = generatePostSlug(title)
+    let finalSlug = baseSlug
+    let counter = 0
+
+    // Keep trying until we find a unique slug
+    while (!(await this.isSlugUniqueInCommunity(communityId, finalSlug, excludePostId))) {
+      counter++
+      finalSlug = `${baseSlug}-${counter}`
+    }
+
+    return finalSlug
   }
 
   /**
@@ -646,13 +778,7 @@ export class CommunityService {
   async getCommentsByPost(postId: string): Promise<CommentWithAuthor[]> {
     const { data, error } = await this.supabaseClient
       .from('post_comments')
-      .select(`
-        *,
-        author:author_id (
-          id,
-          email
-        )
-      `)
+      .select('*')
       .eq('post_id', postId)
       .order('created_at', { ascending: true })
 
@@ -660,7 +786,13 @@ export class CommunityService {
       throw new Error(`Failed to fetch comments: ${error.message}`)
     }
 
-    return data || []
+    return (data || []).map(comment => ({
+      ...comment,
+      author: {
+        id: comment.author_id,
+        email: null
+      }
+    }))
   }
 
   // ==================== NOTIFICATIONS ====================
@@ -848,4 +980,109 @@ export class CommunityService {
 
     return data || []
   }
+
+  // ==================== BUS UTILITIES ====================
+
+  /**
+   * Get bus ID by name
+   */
+  async getBusIdByName(busName: string): Promise<string | null> {
+    const { data, error } = await this.supabaseClient
+      .from('buses')
+      .select('id')
+      .eq('name', busName)
+      .eq('status', 'active')
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null // Bus not found
+      }
+      throw new Error(`Failed to fetch bus: ${error.message}`)
+    }
+
+    return data?.id || null
+  }
+
+  /**
+   * Get bus name by ID
+   */
+  async getBusNameById(busId: string): Promise<string | null> {
+    const { data, error } = await this.supabaseClient
+      .from('buses')
+      .select('name')
+      .eq('id', busId)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return null // Bus not found
+      }
+      throw new Error(`Failed to fetch bus: ${error.message}`)
+    }
+
+    return data?.name || null
+  }
+
+  /**
+   * Generate a URL-safe slug from community name
+   */
+  private generateSlug(name: string): string {
+    return name
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-') // Replace multiple hyphens with single
+      .trim()
+  }
+
+  /**
+   * Get community by slug (URL-safe identifier)
+   */
+  async getCommunityBySlug(slug: string): Promise<Community | null> {
+    // First try to find by exact slug match if we have a slug column
+    // For now, we'll search by name pattern matching
+    const { data: communities, error } = await this.supabaseClient
+      .from('communities')
+      .select('*')
+
+    if (error) {
+      throw new Error(`Failed to fetch communities: ${error.message}`)
+    }
+
+    if (!communities) return null
+
+    // Find community where generated slug matches the provided slug
+    const community = communities.find(c => this.generateSlug(c.name) === slug)
+    return community || null
+  }
+
+  /**
+   * Get community slug from name
+   */
+  getCommunitySlug(community: Community): string {
+    return this.generateSlug(community.name)
+  }
+
+  /**
+   * Search communities by name (case-insensitive)
+   */
+  async searchCommunitiesByName(name: string): Promise<Community[]> {
+    const { data: communities, error } = await this.supabaseClient
+      .from('communities')
+      .select('*')
+      .ilike('name', `%${name}%`)
+      .order('name')
+
+    if (error) {
+      throw new Error(`Failed to search communities: ${error.message}`)
+    }
+
+    return communities || []
+  }
 }
+
+// Create and export a singleton instance
+import { getSupabaseClient } from '@/lib/supabase/client'
+
+export const communityService = new CommunityService(getSupabaseClient())
