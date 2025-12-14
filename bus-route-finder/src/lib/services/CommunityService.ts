@@ -269,22 +269,19 @@ export class CommunityService {
    */
   async getMembersByCommunity(communityId: string): Promise<MemberWithUser[]> {
     const { data, error } = await this.supabaseClient
-      .from('community_members')
-      .select('*')
-      .eq('community_id', communityId)
-      .order('joined_at', { ascending: false })
+      .rpc('get_members_with_users', {
+        p_community_id: communityId
+      })
 
     if (error) {
       throw new Error(`Failed to fetch community members: ${error.message}`)
     }
 
-    // For now, return the data without user details since auth.users is not directly accessible
-    // You might want to create a profiles table or use RPC functions for user details
-    return (data || []).map(member => ({
+    return (data || []).map((member: any) => ({
       ...member,
       user: {
         id: member.user_id,
-        email: null // Will need to be populated separately if needed
+        email: member.user_email
       }
     }))
   }
@@ -444,54 +441,43 @@ export class CommunityService {
       offset?: number
     }
   ): Promise<PostWithAuthor[]> {
-    let query = this.supabaseClient
-      .from('community_posts')
-      .select(`
-        *,
-        buses:bus_id (
-          id,
-          name
-        )
-      `)
-      .eq('community_id', communityId)
-
-    if (options?.postType) {
-      query = query.eq('post_type', options.postType)
-    }
-
-    if (options?.status) {
-      query = query.eq('status', options.status)
-    }
-
-    query = query.order('created_at', { ascending: false })
-
-    if (options?.limit) {
-      query = query.limit(options.limit)
-    }
-
-    if (options?.offset) {
-      query = query.range(options.offset, options.offset + (options.limit || 10) - 1)
-    }
-
-    const { data, error } = await query
+    const { data, error } = await this.supabaseClient
+      .rpc('get_posts_with_authors', {
+        p_community_id: communityId,
+        p_post_type: options?.postType || null,
+        p_status: options?.status || null,
+        p_limit: options?.limit || null,
+        p_offset: options?.offset || 0
+      })
 
     if (error) {
       throw new Error(`Failed to fetch community posts: ${error.message}`)
     }
 
-    // Map the data to include author and bus information
-    return (data || []).map((post: any) => ({
-      ...post,
-      author: {
-        id: post.author_id,
-        email: null // Will need to be populated separately if needed
-      },
-      bus: post.buses ? {
-        id: post.buses.id,
-        name: post.buses.name
-      } : null,
-      buses: undefined // Remove the raw buses field
-    }))
+    // Get bus information for posts that have bus_id
+    const postsWithBusInfo = await Promise.all(
+      (data || []).map(async (post: any) => {
+        let bus = null
+        if (post.bus_id) {
+          const busName = await this.getBusNameById(post.bus_id)
+          bus = {
+            id: post.bus_id,
+            name: busName
+          }
+        }
+
+        return {
+          ...post,
+          author: {
+            id: post.author_id,
+            email: post.author_email
+          },
+          bus
+        }
+      })
+    )
+
+    return postsWithBusInfo
   }
 
   /**
@@ -499,26 +485,38 @@ export class CommunityService {
    */
   async getPostsByUser(userId: string): Promise<PostWithAuthor[]> {
     const { data, error } = await this.supabaseClient
-      .from('community_posts')
-      .select('*')
-      .eq('author_id', userId)
-      .order('created_at', { ascending: false })
+      .rpc('get_posts_by_user_with_author', {
+        p_user_id: userId
+      })
 
     if (error) {
       throw new Error(`Failed to fetch user posts: ${error.message}`)
     }
 
-    return (data || []).map(post => ({
-      ...post,
-      author: {
-        id: post.author_id,
-        email: null
-      },
-      bus: post.bus_id ? {
-        id: post.bus_id,
-        name: null
-      } : null
-    }))
+    // Get bus information for posts that have bus_id
+    const postsWithBusInfo = await Promise.all(
+      (data || []).map(async (post: any) => {
+        let bus = null
+        if (post.bus_id) {
+          const busName = await this.getBusNameById(post.bus_id)
+          bus = {
+            id: post.bus_id,
+            name: busName
+          }
+        }
+
+        return {
+          ...post,
+          author: {
+            id: post.author_id,
+            email: post.author_email
+          },
+          bus
+        }
+      })
+    )
+
+    return postsWithBusInfo
   }
 
   /**
@@ -526,25 +524,27 @@ export class CommunityService {
    */
   async getPostsByBus(busId: string): Promise<PostWithAuthor[]> {
     const { data, error } = await this.supabaseClient
-      .from('community_posts')
-      .select('*')
-      .eq('bus_id', busId)
-      .order('created_at', { ascending: false })
+      .rpc('get_posts_by_bus_with_author', {
+        p_bus_id: busId
+      })
 
     if (error) {
       throw new Error(`Failed to fetch bus posts: ${error.message}`)
     }
 
-    return (data || []).map(post => ({
+    // Get bus information
+    const busName = await this.getBusNameById(busId)
+
+    return (data || []).map((post: any) => ({
       ...post,
       author: {
         id: post.author_id,
-        email: null
+        email: post.author_email
       },
-      bus: post.bus_id ? {
-        id: post.bus_id,
-        name: null
-      } : null
+      bus: {
+        id: busId,
+        name: busName
+      }
     }))
   }
 
@@ -553,37 +553,33 @@ export class CommunityService {
    */
   async getPostById(postId: string): Promise<PostWithAuthor | null> {
     const { data, error } = await this.supabaseClient
-      .from('community_posts')
-      .select(`
-        *,
-        buses:bus_id (
-          id,
-          name
-        )
-      `)
-      .eq('id', postId)
-      .single()
+      .rpc('get_post_with_author', {
+        p_post_id: postId
+      })
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return null
-      }
       throw new Error(`Failed to fetch post: ${error.message}`)
     }
 
-    if (!data) return null
+    if (!data || data.length === 0) return null
+
+    const post = data[0]
+    let bus = null
+    if (post.bus_id) {
+      const busName = await this.getBusNameById(post.bus_id)
+      bus = {
+        id: post.bus_id,
+        name: busName
+      }
+    }
 
     return {
-      ...data,
+      ...post,
       author: {
-        id: data.author_id,
-        email: null
+        id: post.author_id,
+        email: post.author_email
       },
-      bus: data.buses ? {
-        id: data.buses.id,
-        name: data.buses.name
-      } : null,
-      buses: undefined // Remove the raw buses field
+      bus
     }
   }
 
@@ -592,38 +588,34 @@ export class CommunityService {
    */
   async getPostBySlug(communityId: string, postSlug: string): Promise<PostWithAuthor | null> {
     const { data, error } = await this.supabaseClient
-      .from('community_posts')
-      .select(`
-        *,
-        buses:bus_id (
-          id,
-          name
-        )
-      `)
-      .eq('community_id', communityId)
-      .eq('slug', postSlug)
-      .single()
+      .rpc('get_post_by_slug_with_author', {
+        p_community_id: communityId,
+        p_slug: postSlug
+      })
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return null
-      }
       throw new Error(`Failed to fetch post by slug: ${error.message}`)
     }
 
-    if (!data) return null
+    if (!data || data.length === 0) return null
+
+    const post = data[0]
+    let bus = null
+    if (post.bus_id) {
+      const busName = await this.getBusNameById(post.bus_id)
+      bus = {
+        id: post.bus_id,
+        name: busName
+      }
+    }
 
     return {
-      ...data,
+      ...post,
       author: {
-        id: data.author_id,
-        email: null
+        id: post.author_id,
+        email: post.author_email
       },
-      bus: data.buses ? {
-        id: data.buses.id,
-        name: data.buses.name
-      } : null,
-      buses: undefined // Remove the raw buses field
+      bus
     }
   }
 
@@ -731,6 +723,8 @@ export class CommunityService {
       .single()
 
     if (error) {
+      // Provide more specific error information
+      console.error('Database error creating comment:', error)
       throw new Error(`Failed to create comment: ${error.message}`)
     }
 
@@ -744,18 +738,21 @@ export class CommunityService {
     commentId: string,
     data: Partial<Pick<PostComment, 'content' | 'is_resolution'>>
   ): Promise<PostComment> {
-    const { data: comment, error } = await this.supabaseClient
+    const { data: comments, error } = await this.supabaseClient
       .from('post_comments')
       .update(data)
       .eq('id', commentId)
       .select()
-      .single()
 
     if (error) {
       throw new Error(`Failed to update comment: ${error.message}`)
     }
 
-    return comment
+    if (!comments || comments.length === 0) {
+      throw new Error('Comment not found or no changes made')
+    }
+
+    return comments[0]
   }
 
   /**
@@ -777,20 +774,19 @@ export class CommunityService {
    */
   async getCommentsByPost(postId: string): Promise<CommentWithAuthor[]> {
     const { data, error } = await this.supabaseClient
-      .from('post_comments')
-      .select('*')
-      .eq('post_id', postId)
-      .order('created_at', { ascending: true })
+      .rpc('get_comments_with_authors', {
+        p_post_id: postId
+      })
 
     if (error) {
       throw new Error(`Failed to fetch comments: ${error.message}`)
     }
 
-    return (data || []).map(comment => ({
+    return (data || []).map((comment: any) => ({
       ...comment,
       author: {
         id: comment.author_id,
-        email: null
+        email: comment.author_email
       }
     }))
   }

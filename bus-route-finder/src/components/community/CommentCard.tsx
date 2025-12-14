@@ -8,6 +8,7 @@ interface CommentCardProps {
   comment: CommentWithAuthor
   onEdit?: (commentId: string) => void
   onDelete?: (commentId: string) => void
+  onHelpful?: (commentId: string) => void
   isAuthor?: boolean
   className?: string
 }
@@ -32,6 +33,7 @@ export function CommentCard({
   comment,
   onEdit,
   onDelete,
+  onHelpful,
   isAuthor = false,
   className
 }: CommentCardProps) {
@@ -75,12 +77,26 @@ export function CommentCard({
 
       {/* Stats */}
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span className="flex items-center gap-1">
-          <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-          </svg>
-          {comment.helpful_count} helpful
-        </span>
+        {onHelpful ? (
+          <Button
+            onClick={() => onHelpful(comment.id)}
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs hover:text-primary"
+          >
+            <svg className="size-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+            </svg>
+            {comment.helpful_count} helpful
+          </Button>
+        ) : (
+          <span className="flex items-center gap-1">
+            <svg className="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
+            </svg>
+            {comment.helpful_count} helpful
+          </span>
+        )}
 
         {/* Author actions */}
         {isAuthor && (onEdit || onDelete) && (

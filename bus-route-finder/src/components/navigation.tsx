@@ -244,12 +244,11 @@ export function Navigation() {
   const pathname = usePathname();
   const { user, loading } = useAuth();
 
-  const filteredNavItems = loading
-    ? []
-    : navItems.filter((item) => {
-        if (item.href === "/bus-management" && !user?.is_contributor) return false;
-        return true;
-      });
+  const filteredNavItems = navItems.filter((item) => {
+    // During loading, show all items except contributor-only ones
+    if (item.href === "/bus-management" && (loading || !user?.is_contributor)) return false;
+    return true;
+  });
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">

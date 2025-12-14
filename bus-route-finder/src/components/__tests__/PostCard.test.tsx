@@ -1,6 +1,6 @@
 import React from 'react'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PostCard } from '../community/PostCard'
 import type { PostWithAuthor } from '@/lib/types/community'
 
@@ -32,6 +32,13 @@ vi.mock('@/lib/stores/communityStore', () => ({
       selectedCommunity: { name: 'Test Community' }
     })
   }
+}))
+
+// Mock the HelpfulButton component
+vi.mock('../community/HelpfulButton', () => ({
+  HelpfulButton: ({ initialCount }: { initialCount: number }) => (
+    <div data-testid="helpful-button">{initialCount}</div>
+  )
 }))
 
 describe('PostCard', () => {
@@ -80,6 +87,7 @@ describe('PostCard', () => {
     expect(screen.getByText('This is a test post content')).toBeTruthy()
     expect(screen.getByText('Discussion')).toBeTruthy()
     expect(screen.getByText('active')).toBeTruthy()
+    expect(screen.getByText('test@example.com')).toBeTruthy() // author email
     expect(screen.getByText('10')).toBeTruthy() // view count
     expect(screen.getByText('5')).toBeTruthy() // comment count
     expect(screen.getByText('3')).toBeTruthy() // helpful count
@@ -169,5 +177,31 @@ describe('PostCard', () => {
 
     expect(mockOnView).toHaveBeenCalledWith('post-1')
     expect(mockNavigateToPost).not.toHaveBeenCalled()
+  })
+
+  it('should display author email when available', () => {
+    render(
+      <PostCard
+        post={mockPost}
+        communityId="community-1"
+        communitySlug="test-community"
+      />
+    )
+
+    expect(screen.getByText('test@example.com')).toBeTruthy()
+  })
+
+  it('should display fallback when author email is not available', () => {
+    const postWithoutAuthor = { ...mockPost, author: undefined }
+    
+    render(
+      <PostCard
+        post={postWithoutAuthor}
+        communityId="community-1"
+        communitySlug="test-community"
+      />
+    )
+
+    expect(screen.getByText('Unknown Author')).toBeTruthy()
   })
 })

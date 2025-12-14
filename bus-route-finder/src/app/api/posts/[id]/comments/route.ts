@@ -75,6 +75,21 @@ export async function POST(
       )
     }
 
+    // Validate content length (database constraint: 1-2000 characters)
+    if (typeof body.content !== 'string' || body.content.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Comment content cannot be empty" },
+        { status: 400 }
+      )
+    }
+
+    if (body.content.length > 2000) {
+      return NextResponse.json(
+        { error: "Comment content cannot exceed 2000 characters" },
+        { status: 400 }
+      )
+    }
+
     const comment = await communityService.createComment({
       post_id: id,
       author_id: user.id,
@@ -86,6 +101,29 @@ export async function POST(
     return NextResponse.json(comment, { status: 201 })
   } catch (error) {
     console.error("Error creating comment:", error)
+    
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      if (error.message.includes('violates foreign key constraint')) {
+        return NextResponse.json(
+          { error: "Post not found or invalid" },
+          { status: 404 }
+        )
+      }
+      if (error.message.includes('violates check constraint')) {
+        return NextResponse.json(
+          { error: "Comment content is invalid or too long" },
+          { status: 400 }
+        )
+      }
+      if (error.message.includes('permission denied')) {
+        return NextResponse.json(
+          { error: "You don't have permission to comment on this post" },
+          { status: 403 }
+        )
+      }
+    }
+    
     return NextResponse.json(
       { error: "Failed to create comment" },
       { status: 500 }

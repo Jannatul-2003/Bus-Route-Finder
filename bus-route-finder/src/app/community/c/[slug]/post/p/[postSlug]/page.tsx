@@ -10,11 +10,12 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/hooks/useAuth"
+import { HelpfulButton } from "@/components/community/HelpfulButton"
 
 export default function SlugBasedPostDetailPage() {
   const router = useRouter()
   const params = useParams()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { navigateBackFromPost } = usePostNavigation()
   const postSlug = params.postSlug as string
   const communitySlug = params.slug as string
@@ -24,6 +25,7 @@ export default function SlugBasedPostDetailPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  const [isMounted, setIsMounted] = React.useState(false)
 
   React.useEffect(() => {
     const observer = {
@@ -31,6 +33,11 @@ export default function SlugBasedPostDetailPage() {
     }
     communityStore.subscribe(observer)
     return () => communityStore.unsubscribe(observer)
+  }, [])
+
+  React.useEffect(() => {
+    // Ensure component is mounted before showing interactive elements
+    setIsMounted(true)
   }, [])
 
   React.useEffect(() => {
@@ -92,6 +99,60 @@ export default function SlugBasedPostDetailPage() {
   const handleMarkResolved = async () => {
     if (!state.selectedPost?.id) return
     await communityStore.updatePost(state.selectedPost.id, { status: 'resolved' })
+  }
+
+  const handleEditComment = async (commentId: string) => {
+    const comment = state.comments.find(c => c.id === commentId)
+    if (!comment) return
+    
+    const newContent = prompt('Edit your comment:', comment.content)
+    if (newContent && newContent.trim() && newContent !== comment.content) {
+      try {
+        await communityStore.updateComment(commentId, { content: newContent.trim() })
+        // Refetch comments to get updated data
+        if (state.selectedPost?.id) {
+          await communityStore.fetchPostComments(state.selectedPost.id)
+        }
+      } catch (error) {
+        console.error('Failed to update comment:', error)
+      }
+    }
+  }
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (confirm('Are you sure you want to delete this comment?')) {
+      try {
+        await communityStore.deleteComment(commentId)
+        // Refetch comments to get updated list
+        if (state.selectedPost?.id) {
+          await communityStore.fetchPostComments(state.selectedPost.id)
+        }
+      } catch (error) {
+        console.error('Failed to delete comment:', error)
+      }
+    }
+  }
+
+  const handleHelpfulComment = async (commentId: string) => {
+    try {
+      // Simple increment without user tracking (since DB schema doesn't support it yet)
+      const response = await fetch(`/api/comments/${commentId}/helpful`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+      
+      if (response.ok) {
+        // Refetch comments to get updated helpful count
+        if (state.selectedPost?.id) {
+          await communityStore.fetchPostComments(state.selectedPost.id)
+        }
+      } else {
+        throw new Error('Failed to mark comment as helpful')
+      }
+    } catch (error) {
+      console.error('Failed to mark comment as helpful:', error)
+      alert('Failed to mark comment as helpful. This feature may not be fully implemented yet.')
+    }
   }
 
   if (isLoading) {
@@ -208,26 +269,27 @@ export default function SlugBasedPostDetailPage() {
           </div>
         )}
 
-        <div className="flex items-center gap-6 mt-4 pt-4 border-t text-sm text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            {post.view_count || 0} views
-          </span>
-          <span className="flex items-center gap-1">
-            <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
-            </svg>
-            {post.comment_count || 0} comments
-          </span>
-          <span className="flex items-center gap-1">
-            <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-            </svg>
-            {post.helpful_count || 0} helpful
-          </span>
+        <div className="flex items-center justify-between mt-4 pt-4 border-t">
+          <div className="flex items-center gap-6 text-sm text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              {post.view_count || 0} views
+            </span>
+            <span className="flex items-center gap-1">
+              <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              </svg>
+              {post.comment_count || 0} comments
+            </span>
+          </div>
+          <HelpfulButton 
+            postId={post.id} 
+            initialCount={post.helpful_count || 0} 
+            variant="default"
+          />
         </div>
       </div>
 
@@ -240,22 +302,34 @@ export default function SlugBasedPostDetailPage() {
           Comments ({state.comments.length})
         </h2>
 
-        {/* Enhanced Comment form - Universal visibility with authentication-based functionality */}
-        {/* Universal post visibility means anyone can VIEW, but only authenticated users can COMMENT (Requirement 5.3) */}
+        {/* Enhanced Comment form - Active interface for authenticated users (Requirements 3.1, 3.4) */}
         <div className="bg-gradient-to-r from-card via-card to-card/50 backdrop-blur-sm border border-border/50 rounded-xl p-6 mb-6 shadow-lg">
-          <Textarea
-            value={commentContent}
-            onChange={(e) => setCommentContent(e.target.value)}
-            placeholder={
-              user 
-                ? "Write a comment..." 
-                : "Please log in to write a comment"
-            }
-            rows={3}
-            className="mb-4 bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
-            disabled={!user}
-          />
-          <div className="flex items-center justify-between">
+          {!isMounted ? (
+            <div className="flex items-center justify-center py-8" suppressHydrationWarning>
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent mr-2"></div>
+              <span className="text-muted-foreground">Loading...</span>
+            </div>
+          ) : authLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-6 w-6 border-2 border-primary border-t-transparent mr-2"></div>
+              <span className="text-muted-foreground">Loading...</span>
+            </div>
+          ) : (
+            <Textarea
+              value={commentContent}
+              onChange={(e) => setCommentContent(e.target.value)}
+              placeholder={
+                user 
+                  ? "Write a comment..." 
+                  : "Please log in to write a comment"
+              }
+              rows={3}
+              className="mb-4 bg-background/50 border-border/50 focus:border-primary/50 transition-colors"
+              disabled={!user}
+            />
+          )}
+          {isMounted && !authLoading && (
+            <div className="flex items-center justify-between">
             {user ? (
               <Button
                 onClick={handleSubmitComment}
@@ -293,7 +367,8 @@ export default function SlugBasedPostDetailPage() {
                 Commenting as {user.email}
               </div>
             )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Enhanced Comments list */}
@@ -317,7 +392,10 @@ export default function SlugBasedPostDetailPage() {
               <CommentCard 
                 key={comment.id} 
                 comment={comment}
-                isAuthor={user?.id === comment.author_id}
+                isAuthor={user?.email === comment.author?.email}
+                onEdit={handleEditComment}
+                onDelete={handleDeleteComment}
+                onHelpful={handleHelpfulComment}
                 className="bg-gradient-to-r from-card via-card to-card/50 backdrop-blur-sm border-border/50 shadow-md hover:shadow-lg transition-all duration-300"
               />
             ))}

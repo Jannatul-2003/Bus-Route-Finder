@@ -7,8 +7,8 @@ import { GET as resolveCommunity } from '../communities/resolve/route'
 import { GET as resolvePost } from '../posts/resolve/route'
 
 // Mock the community service
-vi.mock('@/lib/services/CommunityService', () => ({
-  communityService: {
+vi.mock('@/lib/services/CommunityService', () => {
+  const mockMethods = {
     getCommunityBySlug: vi.fn(),
     getCommunityById: vi.fn(),
     getCommunitySlug: vi.fn(),
@@ -18,21 +18,18 @@ vi.mock('@/lib/services/CommunityService', () => ({
     createPost: vi.fn(),
     generateUniquePostSlug: vi.fn(),
     getBusIdByName: vi.fn(),
-    incrementPostViewCount: vi.fn()
-  },
-  CommunityService: vi.fn().mockImplementation(() => ({
-    getCommunityBySlug: vi.fn(),
-    getCommunityById: vi.fn(),
-    getCommunitySlug: vi.fn(),
-    getPostsByCommunity: vi.fn(),
-    getPostBySlug: vi.fn(),
-    getPostById: vi.fn(),
-    createPost: vi.fn(),
-    generateUniquePostSlug: vi.fn(),
-    getBusIdByName: vi.fn(),
-    incrementPostViewCount: vi.fn()
-  }))
-}))
+    incrementPostViewCount: vi.fn(),
+    getMembersByCommunity: vi.fn(),
+    getCommentsByPost: vi.fn(),
+    getPostsByUser: vi.fn(),
+    getPostsByBus: vi.fn()
+  }
+  
+  return {
+    communityService: mockMethods,
+    CommunityService: vi.fn().mockImplementation(() => mockMethods)
+  }
+})
 
 // Mock Supabase server
 vi.mock('@/lib/supabase/server', () => ({
@@ -47,6 +44,12 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 
 const mockCommunityService = await import('@/lib/services/CommunityService')
+
+// Get the mocked methods for easier access in tests
+const getMockMethods = () => {
+  const service = new mockCommunityService.CommunityService({} as any)
+  return service
+}
 
 describe('Slug-based API Endpoints', () => {
   beforeEach(() => {
@@ -66,7 +69,8 @@ describe('Slug-based API Endpoints', () => {
     })
 
     it('should return 404 for non-existent community', async () => {
-      mockCommunityService.communityService.getCommunityBySlug.mockResolvedValue(null)
+      const mockMethods = getMockMethods()
+      mockMethods.getCommunityBySlug.mockResolvedValue(null)
       
       const request = new NextRequest('http://localhost/api/communities/by-slug/non-existent')
       const params = Promise.resolve({ slug: 'non-existent' })
@@ -85,8 +89,9 @@ describe('Slug-based API Endpoints', () => {
         description: 'A test community'
       }
       
-      mockCommunityService.communityService.getCommunityBySlug.mockResolvedValue(mockCommunity)
-      mockCommunityService.communityService.getCommunitySlug.mockReturnValue('test-community')
+      const mockMethods = getMockMethods()
+      mockMethods.getCommunityBySlug.mockResolvedValue(mockCommunity)
+      mockMethods.getCommunitySlug.mockReturnValue('test-community')
       
       const request = new NextRequest('http://localhost/api/communities/by-slug/test-community')
       const params = Promise.resolve({ slug: 'test-community' })
@@ -124,8 +129,9 @@ describe('Slug-based API Endpoints', () => {
         { id: '2', title: 'Test Post 2', content: 'Content 2' }
       ]
       
-      mockCommunityService.communityService.getCommunityBySlug.mockResolvedValue(mockCommunity)
-      mockCommunityService.communityService.getPostsByCommunity.mockResolvedValue(mockPosts)
+      const mockMethods = getMockMethods()
+      mockMethods.getCommunityBySlug.mockResolvedValue(mockCommunity)
+      mockMethods.getPostsByCommunity.mockResolvedValue(mockPosts)
       
       const request = new NextRequest('http://localhost/api/communities/by-slug/test-community/posts')
       const params = Promise.resolve({ slug: 'test-community' })
@@ -169,8 +175,9 @@ describe('Slug-based API Endpoints', () => {
         name: 'Test Community'
       }
       
-      mockCommunityService.communityService.getCommunityBySlug.mockResolvedValue(mockCommunity)
-      mockCommunityService.communityService.getCommunitySlug.mockReturnValue('test-community')
+      const mockMethods = getMockMethods()
+      mockMethods.getCommunityBySlug.mockResolvedValue(mockCommunity)
+      mockMethods.getCommunitySlug.mockReturnValue('test-community')
       
       const request = new NextRequest('http://localhost/api/communities/resolve?slug=test-community')
       
@@ -219,9 +226,10 @@ describe('Slug-based API Endpoints', () => {
         community_id: mockCommunity.id
       }
       
-      mockCommunityService.communityService.getCommunityBySlug.mockResolvedValue(mockCommunity)
-      mockCommunityService.communityService.getPostBySlug.mockResolvedValue(mockPost)
-      mockCommunityService.communityService.getCommunitySlug.mockReturnValue('test-community')
+      const mockMethods = getMockMethods()
+      mockMethods.getCommunityBySlug.mockResolvedValue(mockCommunity)
+      mockMethods.getPostBySlug.mockResolvedValue(mockPost)
+      mockMethods.getCommunitySlug.mockReturnValue('test-community')
       
       const request = new NextRequest('http://localhost/api/posts/resolve?community_slug=test-community&post_slug=test-post')
       

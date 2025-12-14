@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { usePostNavigation } from "@/hooks/usePostNavigation"
 import { communityStore } from "@/lib/stores/communityStore"
 import { generatePostSlug } from "@/lib/utils/slugs"
+import { HelpfulButton } from "./HelpfulButton"
 import type { PostWithAuthor, PostType, PostStatus } from "@/lib/types/community"
 
 interface PostCardProps {
@@ -162,6 +163,23 @@ export function PostCard({
         </div>
       )}
 
+      {/* Enhanced Author information */}
+      <div className="flex items-center gap-2 mb-4 pb-4 border-b border-border/50">
+        <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <svg className="size-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-foreground truncate">
+            {post.author?.email || 'Unknown Author'}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {formatDate(post.created_at)}
+          </p>
+        </div>
+      </div>
+
       {/* Enhanced Stats and metadata */}
       <div className="flex items-center justify-between pt-4 border-t border-border/50">
         <div className="flex items-center gap-4">
@@ -178,18 +196,11 @@ export function PostCard({
             </svg>
             <span className="text-sm font-medium text-foreground">{post.comment_count}</span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-muted/50 transition-colors group-hover:bg-accent/10">
-            <svg className="size-4 text-accent-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5" />
-            </svg>
-            <span className="text-sm font-medium text-foreground">{post.helpful_count}</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="font-medium">{formatDate(post.created_at)}</span>
+          <HelpfulButton 
+            postId={post.id} 
+            initialCount={post.helpful_count} 
+            variant="compact"
+          />
         </div>
       </div>
 

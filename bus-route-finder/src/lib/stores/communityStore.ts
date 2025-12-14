@@ -948,6 +948,23 @@ class CommunityStore extends Observable<CommunityState> {
     is_resolution?: boolean
     contact_info?: string
   }): Promise<void> {
+    // Validate input before making API call
+    if (!data.content || data.content.trim().length === 0) {
+      this.#setState({ 
+        error: 'Comment content cannot be empty',
+        loading: false 
+      })
+      return
+    }
+
+    if (data.content.length > 2000) {
+      this.#setState({ 
+        error: 'Comment content cannot exceed 2000 characters',
+        loading: false 
+      })
+      return
+    }
+
     this.#setState({ loading: true, error: null })
 
     try {
@@ -958,16 +975,26 @@ class CommunityStore extends Observable<CommunityState> {
       })
 
       if (!response.ok) {
-        throw new Error('Failed to create comment')
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = errorData.error || `Failed to create comment (${response.status})`
+        throw new Error(errorMessage)
       }
 
       const comment = await response.json()
       
-      // Add to comments list
+      // Update post comment count
+      const updatedSelectedPost = this.#state.selectedPost ? {
+        ...this.#state.selectedPost,
+        comment_count: this.#state.selectedPost.comment_count + 1
+      } : null
+
       this.#setState({
-        comments: [...this.#state.comments, comment],
+        selectedPost: updatedSelectedPost,
         loading: false
       })
+
+      // Refetch comments to get the newly created comment with author information
+      await this.fetchPostComments(postId)
     } catch (error) {
       this.#setState({
         loading: false,

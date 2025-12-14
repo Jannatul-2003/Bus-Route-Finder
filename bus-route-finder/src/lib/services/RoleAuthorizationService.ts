@@ -166,7 +166,7 @@ export class RoleAuthorizationService {
 
   /**
    * Check if user can comment on posts
-   * Only community members can comment
+   * Any authenticated user can comment (Requirements 3.1, 3.2)
    */
   async canCommentOnPost(user: AuthUser | null, postId: string): Promise<RoleCheckResult> {
     const role = this.getUserRole(user)
@@ -179,10 +179,10 @@ export class RoleAuthorizationService {
       }
     }
 
-    // Get the community ID from the post
+    // Verify the post exists
     const { data: post } = await this.supabase
       .from('community_posts')
-      .select('community_id')
+      .select('id')
       .eq('id', postId)
       .single()
 
@@ -194,16 +194,7 @@ export class RoleAuthorizationService {
       }
     }
 
-    // Check if user is a member of the community
-    const isMember = await this.isUserMemberOfCommunity(user!.id, post.community_id)
-    if (!isMember) {
-      return {
-        allowed: false,
-        role,
-        reason: 'Must be a community member to comment on posts'
-      }
-    }
-    
+    // Any authenticated user can comment (remove community membership barrier)
     return {
       allowed: true,
       role
