@@ -11,19 +11,6 @@ interface BusResultCardProps {
 }
 
 /**
- * Format distance for display
- * - Meters if < 1000m
- * - Kilometers with 2 decimal places if >= 1000m
- */
-function formatDistance(distance: number): string {
-  if (distance < 1000) {
-    return `${Math.round(distance)}m`
-  } else {
-    return `${(distance / 1000).toFixed(2)}km`
-  }
-}
-
-/**
  * Format time in minutes to human-readable format
  */
 function formatTime(minutes: number): string {
@@ -99,7 +86,7 @@ export function BusResultCard({
       )}
     >
       {/* Header: Bus name and badges */}
-      <div className="flex items-start justify-between gap-2 sm:gap-3 mb-2 sm:mb-3">
+      <div className="flex items-start gap-2 sm:gap-3 mb-2 sm:mb-3">
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-base sm:text-lg leading-tight text-foreground mb-1.5 sm:mb-2">
             {bus.name}
@@ -173,32 +160,6 @@ export function BusResultCard({
             </Badge>
           </div>
         </div>
-
-        {/* Journey length prominently displayed */}
-        <div className="flex flex-col items-end shrink-0">
-          <div className="flex items-center gap-1 sm:gap-1.5 text-primary font-bold text-lg sm:text-xl">
-            <svg
-              className="size-4 sm:size-5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-              />
-            </svg>
-            <span aria-label={`Journey length: ${formatDistance(bus.journeyLength * 1000)}`}>
-              {formatDistance(bus.journeyLength * 1000)}
-            </span>
-          </div>
-          <span className="text-[10px] sm:text-xs text-muted-foreground mt-0.5">
-            journey
-          </span>
-        </div>
       </div>
 
       {/* Route visualization */}
@@ -227,75 +188,6 @@ export function BusResultCard({
           </div>
           <span className="font-medium text-foreground shrink-0">
             {bus.offboardingStop.name}
-          </span>
-        </div>
-      </div>
-
-      {/* Walking distances and time estimate */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-2 sm:mb-3">
-        {/* Walking to onboarding */}
-        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
-          <svg
-            className="size-4 text-muted-foreground shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-            />
-          </svg>
-          <span className="text-muted-foreground">Walk:</span>
-          <span className="font-medium text-foreground">
-            {formatDistance(bus.walkingDistanceToOnboarding * 1000)}
-          </span>
-        </div>
-
-        {/* Bus ride */}
-        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
-          <svg
-            className="size-4 text-muted-foreground shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
-            />
-          </svg>
-          <span className="text-muted-foreground">Ride:</span>
-          <span className="font-medium text-foreground">
-            {formatDistance(bus.journeyLength * 1000)}
-          </span>
-        </div>
-
-        {/* Walking from offboarding */}
-        <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm">
-          <svg
-            className="size-4 text-muted-foreground shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-            />
-          </svg>
-          <span className="text-muted-foreground">Walk:</span>
-          <span className="font-medium text-foreground">
-            {formatDistance(bus.walkingDistanceFromOffboarding * 1000)}
           </span>
         </div>
       </div>
@@ -377,7 +269,7 @@ export function BusResultCard({
           role="region"
           aria-label="Additional bus details"
         >
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <div>
               <span className="text-muted-foreground block mb-1">
                 Journey Time:
@@ -392,22 +284,6 @@ export function BusResultCard({
               </span>
               <span className="font-medium text-foreground">
                 {formatTime(bus.estimatedWalkingTime)}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block mb-1">
-                Total Distance:
-              </span>
-              <span className="font-medium text-foreground">
-                {formatDistance(bus.totalDistance * 1000)}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block mb-1">
-                Walking Distance:
-              </span>
-              <span className="font-medium text-foreground">
-                {formatDistance(bus.totalWalkingDistance * 1000)}
               </span>
             </div>
           </div>

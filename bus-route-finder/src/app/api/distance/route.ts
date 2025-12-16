@@ -16,7 +16,8 @@ export async function POST(request: Request) {
     }
 
     // Use Strategy Pattern - DistanceCalculator handles strategy selection and fallback
-    const osrmBaseUrl = process.env.OSRM_BASE_URL || "http://localhost:5000"
+    // Use public OSRM API by default, or allow override via environment variable
+    const osrmBaseUrl = process.env.OSRM_BASE_URL || process.env.NEXT_PUBLIC_OSRM_BASE_URL || "http://router.project-osrm.org"
     const calculator = DistanceCalculator.createDefault(osrmBaseUrl)
 
     // Calculate distances using the strategy pattern (with automatic fallback)
