@@ -137,14 +137,28 @@ export class OSRMStrategy implements DistanceCalculationStrategy {
    * Check if OSRM service is available
    */
   async isAvailable(): Promise<boolean> {
-    try {
-      const testUrl = `${this.baseUrl}/table/v1/driving/0,0;0,0?annotations=distance`
-      const response = await fetch(testUrl, { signal: AbortSignal.timeout(5000) })
-      return response.ok
-    } catch {
-      return false
-    }
+  try {
+    const url = `${this.baseUrl}/route/v1/driving/13.388860,52.517037;13.397634,52.529407?overview=false`
+    const res = await fetch(url, { method: 'GET' })
+
+    if (!res.ok) return false
+
+    const data = await res.json()
+    return data.code === 'Ok'
+  } catch {
+    return false
   }
+}
+
+  // async isAvailable(): Promise<boolean> {
+  //   try {
+  //     const testUrl = `${this.baseUrl}/table/v1/driving/0,0;0,0?annotations=distance`
+  //     const response = await fetch(testUrl, { signal: AbortSignal.timeout(5000) })
+  //     return response.ok
+  //   } catch {
+  //     return false
+  //   }
+  // }
 }
 
 

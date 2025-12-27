@@ -1,188 +1,98 @@
-# Database Population Scripts
+# Database Scripts
 
-These scripts help populate the new database columns added by the migrations with real data using OSRM for accurate distance calculations.
+## populate-distances.ts
 
-## Prerequisites
+This script calculates and stores missing `distance_to_next` values in the `route_stops` table using **OSRM Public API** for accurate road-based distance calculations.
 
-1. **Environment Variables**: Make sure your `.env.local` file contains:
-   ```env
+### Purpose
+- Fixes inconsistent distance calculations between different bus routes
+- Populates missing `distance_to_next` values that are currently `null`
+- Uses **OSRM Public API** for accurate road-based distances (no fallback to Haversine)
+
+### Prerequisites
+1. **Environment Variables**: Ensure these are set in your `.env.local`:
+   ```
    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-   # Optional: Use service role key for better permissions
-   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-   
-   # Optional: Custom OSRM endpoint (defaults to public OSRM)
-   OSRM_ENDPOINT=https://router.project-osrm.org
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
 
-2. **Migrations Applied**: Ensure you've run both migration scripts:
-   - `001_add_bus_amenities.sql`
-   - `002_add_route_distances.sql`
+2. **Internet Connection**: 
+   - Script uses the public OSRM API: `https://router.project-osrm.org`
+   - No local OSRM server required
+   - Includes rate limiting to respect public API limits
 
-## Scripts
-
-### 1. Update Bus Amenities
-
-Updates the `is_ac` and `coach_type` columns for existing buses by inferring values from bus names.
+### Usage
 
 ```bash
-npm run db:update-amenities
-```
-
-**What it does:**
-- Fetches all active buses from the database
-- Infers AC status and coach type from bus names
-- Updates buses that don't have amenity data
-- Shows statistics of the updates
-
-**Inference Logic:**
-- **AC Detection**: Looks for keywords like "AC", "A/C", "Air", "Luxury", "Premium", "Express"
-- **Coach Type**:
-  - `luxury`: Contains "Luxury", "Premium", "Deluxe"
-  - `express`: Contains "Express", "Rapid", "Fast"
-  - `standard`: Everything else
-
-**Note**: After running, review the results in Supabase and manually adjust any incorrect classifications.
-
-### 2. Populate Route Distances
-
-Calculates and populates `distance_to_next` and `duration_to_next` for all route segments using OSRM with Haversine fallback.
-
-```bash
+# Run the distance population script
 npm run db:populate-distances
+
+# Or run directly with tsx
+npx tsx scripts/populate-distances.ts
 ```
 
-**What it does:**
-- Fetches all route segments that need distance calculation
-- Uses OSRM to calculate real road network distances
-- Falls back to Haversine (straight-line) distance if OSRM fails
-- Calculates estimated duration based on distance
-- Processes in batches to avoid overwhelming OSRM
-- Shows progress and statistics
+### What it does
 
-**Configuration:**
-- `BATCH_SIZE`: 50 segments per batch
-- `OSRM_TIMEOUT`: 30 seconds per request
-- `AVERAGE_SPEED_KMH`: 20 km/h for duration estimation
+1. **Fetches** all route segments with `distance_to_next = null`
+2. **Groups** segments by bus route and direction
+3. **Calculates** distances between consecutive stops using **OSRM Public API only**
+4. **Updates** the database with calculated distances
+5. **Processes** in small batches with delays to respect API rate limits
 
-**OSRM Endpoints:**
-- **Default**: `https://router.project-osrm.org` (public, free, but rate-limited)
-- **Custom**: Set `OSRM_ENDPOINT` in `.env.local` for your own OSRM instance
+### Rate Limiting Features
 
-## Usage Workflow
+- **Small batch size**: 10 segments per batch (vs 50 for local OSRM)
+- **Request delays**: 500ms between individual requests
+- **Batch delays**: 2 seconds between batches
+- **Error handling**: Extra delays after API errors
 
-1. **First, update bus amenities:**
-   ```bash
-   npm run db:update-amenities
-   ```
+### Output Example
+
+```
+🚌 Starting distance population script using OSRM Public API...
+✅ OSRM Public API is available and ready
+🌐 Using public API: https://router.project-osrm.org
+📊 Fetching route segments with missing distances...
+📈 Found 1,234 route segments with missing distances
+🗺️  Processing 45 routes
+
+🚌 Processing: Rajdhani Super Bus Route Dhaka (outbound)
+   28 segments to process
+   📦 Processing batch 1/3 (10 segments)
+   ✅ Banasree → Rampura: 1.250 km (OSRM)
+   ✅ Rampura → Madhya Badda: 0.850 km (OSRM)
+   ✅ Madhya Badda → Badda: 0.420 km (OSRM)
+   💾 Updated 9 segments in database
+   ⏳ Waiting 2000ms before next batch (respecting API rate limits)...
+
+📊 Summary:
+   Total segments processed: 1,234
+   Successfully updated: 1,200
+   Errors: 34
    
-2. **Then, populate route distances:**
-   ```bash
-   npm run db:populate-distances
-   ```
-   
-3. **Verify the results** in Supabase SQL Editor:
-   ```sql
-   -- Check bus amenities
-   SELECT is_ac, coach_type, COUNT(*) 
-   FROM buses 
-   GROUP BY is_ac, coach_type;
-   
-   -- Check route distances
-   SELECT 
-     COUNT(*) as total_segments,
-     COUNT(distance_to_next) as with_distance,
-     COUNT(duration_to_next) as with_duration,
-     ROUND(AVG(distance_to_next)::numeric, 2) as avg_distance_km
-   FROM route_stops;
-   ```
-
-## Setting Up Your Own OSRM Instance
-
-For production use with high volume, consider setting up your own OSRM instance:
-
-### Using Docker (Recommended)
-
-1. **Download Bangladesh OSM data:**
-   ```bash
-   wget https://download.geofabrik.de/asia/bangladesh-latest.osm.pbf
-   ```
-
-2. **Process the data:**
-   ```bash
-   docker run -t -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend osrm-extract -p /opt/car.lua /data/bangladesh-latest.osm.pbf
-   docker run -t -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend osrm-partition /data/bangladesh-latest.osrm
-   docker run -t -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend osrm-customize /data/bangladesh-latest.osrm
-   ```
-
-3. **Run the OSRM server:**
-   ```bash
-   docker run -t -i -p 5000:5000 -v "${PWD}:/data" ghcr.io/project-osrm/osrm-backend osrm-routed --algorithm mld /data/bangladesh-latest.osrm
-   ```
-
-4. **Update your `.env.local`:**
-   ```env
-   OSRM_ENDPOINT=http://localhost:5000
-   ```
-
-### Using Dhaka-Only Data
-
-For better performance, you can extract just Dhaka city data:
-
-```bash
-# Install osmium-tool
-sudo apt-get install osmium-tool
-
-# Extract Dhaka area (approximate bounding box)
-osmium extract -b 90.3,23.7,90.5,23.9 bangladesh-latest.osm.pbf -o dhaka.osm.pbf
-
-# Then process dhaka.osm.pbf with OSRM as shown above
+✅ Distance population completed successfully using OSRM Public API!
+   Your bus route distances are now accurate and consistent.
+   All distances calculated using real road networks.
 ```
 
-## Troubleshooting
+### Benefits After Running
 
-### OSRM Timeout Errors
-- The script automatically falls back to Haversine distance
-- Consider setting up your own OSRM instance for better reliability
-- Increase `OSRM_TIMEOUT` in the script if needed
+- **100% OSRM accuracy**: All distances calculated using real road networks
+- **Consistent distances**: All bus routes use the same calculation method
+- **Better performance**: Pre-calculated distances are faster than real-time calculation
+- **Fixed discrepancies**: Resolves issues like 21.03 km vs 2.52 km for the same route
+- **No local setup**: Uses public API, no need to run OSRM server locally
 
-### Permission Errors
-- Use `SUPABASE_SERVICE_ROLE_KEY` instead of `ANON_KEY` for better permissions
-- Check that your Supabase RLS policies allow updates
+### Important Notes
 
-### Incorrect Amenity Inference
-- The script infers amenities from bus names, which may not always be accurate
-- Manually review and correct in Supabase after running the script
-- Consider creating a CSV mapping file for more accurate classification
+- **OSRM Only**: Script rejects any Haversine fallback results for maximum accuracy
+- **Rate Limited**: Designed to respect public API limits with appropriate delays
+- **Internet Required**: Requires stable internet connection to access public OSRM API
+- **Slower Processing**: Takes longer than local OSRM due to rate limiting (but more accessible)
 
-### Rate Limiting
-- The public OSRM endpoint may rate-limit requests
-- The script includes a 100ms delay between requests
-- For large datasets, use your own OSRM instance
+### Troubleshooting
 
-## Manual Updates
-
-If you prefer to update specific buses or routes manually:
-
-### Update Specific Bus Amenities
-```sql
-UPDATE buses
-SET is_ac = true, coach_type = 'express'
-WHERE name = 'Your Bus Name';
-```
-
-### Update Specific Route Distances
-```sql
-UPDATE route_stops
-SET distance_to_next = 2.5, duration_to_next = 450
-WHERE id = 'route_stop_id';
-```
-
-## Next Steps
-
-After populating the data:
-
-1. Verify the data in Supabase
-2. Test the route planning functionality
-3. Monitor for any missing or incorrect data
-4. Set up periodic updates if your route data changes frequently
+- **API rate limiting**: Script includes built-in delays, but you may need to run it multiple times for large datasets
+- **Network errors**: Script will retry and continue processing other segments
+- **Database errors**: Check Supabase connection and permissions
+- **Missing coordinates**: Some stops might not have latitude/longitude data
