@@ -54,49 +54,21 @@ describe("BusResultCard", () => {
     expect(screen.getByText("Express")).toBeTruthy()
   })
 
-  it("displays journey length prominently", () => {
-    render(<BusResultCard bus={mockBus} />)
-    // Journey length is 2.5 km = 2500m, should display as "2.50km"
-    // Use getAllByText since it appears twice (in header and in ride section)
-    const elements = screen.getAllByText("2.50km")
-    expect(elements.length).toBeGreaterThan(0)
-  })
-
   it("displays onboarding and offboarding stop names", () => {
     render(<BusResultCard bus={mockBus} />)
     expect(screen.getByText("Gulshan Circle 1")).toBeTruthy()
     expect(screen.getByText("Motijheel")).toBeTruthy()
   })
 
-  it("displays walking distances", () => {
+  it("does not display distance values", () => {
     render(<BusResultCard bus={mockBus} />)
-    // Walking distances should be displayed in meters
-    const walkElements = screen.getAllByText(/Walk:/)
-    expect(walkElements).toHaveLength(2)
+    expect(screen.queryByText(/km/i)).toBeNull()
+    expect(screen.queryByText(/walk:/i)).toBeNull()
   })
 
   it("displays estimated total time", () => {
     render(<BusResultCard bus={mockBus} />)
     expect(screen.getByText("23 min")).toBeTruthy()
-  })
-
-  it("formats distances in meters when less than 1000m", () => {
-    const shortDistanceBus = {
-      ...mockBus,
-      walkingDistanceToOnboarding: 0.25, // 250m
-    }
-    render(<BusResultCard bus={shortDistanceBus} />)
-    expect(screen.getByText("250m")).toBeTruthy()
-  })
-
-  it("formats distances in kilometers when 1000m or more", () => {
-    const longDistanceBus = {
-      ...mockBus,
-      journeyLength: 2.5, // 2500m = 2.50km
-    }
-    render(<BusResultCard bus={longDistanceBus} />)
-    const elements = screen.getAllByText("2.50km")
-    expect(elements.length).toBeGreaterThan(0)
   })
 
   it("formats time in minutes when less than 60 minutes", () => {
@@ -199,9 +171,6 @@ describe("BusResultCard", () => {
     // Check for ARIA labels
     expect(screen.getByLabelText(/air conditioned/i)).toBeTruthy()
     expect(screen.getByLabelText(/express coach/i)).toBeTruthy()
-    expect(
-      screen.getByLabelText(/journey length: 2.50km/i)
-    ).toBeTruthy()
   })
 
   it("displays all required information in expanded details", async () => {
@@ -215,7 +184,5 @@ describe("BusResultCard", () => {
     // Check all expanded details are present
     expect(screen.getByText("Journey Time:")).toBeTruthy()
     expect(screen.getByText("Walking Time:")).toBeTruthy()
-    expect(screen.getByText("Total Distance:")).toBeTruthy()
-    expect(screen.getByText("Walking Distance:")).toBeTruthy()
   })
 })

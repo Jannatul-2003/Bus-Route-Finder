@@ -71,6 +71,9 @@ export interface RoutePlannerState {
   walkingDistanceToOnboarding: number | null
   walkingDistanceFromOffboarding: number | null
   
+  // Journey distance between onboarding and offboarding stops (calculated via OSRM, in kilometers)
+  journeyDistanceBetweenStops: number | null
+  
   // Bus results
   allBuses: EnhancedBusResult[] // Original unfiltered results
   availableBuses: EnhancedBusResult[] // Filtered and sorted results
@@ -114,6 +117,9 @@ const initialState: RoutePlannerState = {
   // Walking distances
   walkingDistanceToOnboarding: null,
   walkingDistanceFromOffboarding: null,
+  
+  // Journey distance between stops
+  journeyDistanceBetweenStops: null,
   
   // Bus results
   allBuses: [],
@@ -160,9 +166,9 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    */
   #getDistanceCalculator(): DistanceCalculator {
     if (!this.#distanceCalculator) {
-      this.#distanceCalculator = DistanceCalculator.createDefault(
-        process.env.NEXT_PUBLIC_OSRM_BASE_URL || "http://localhost:5000"
-      )
+      // Use public OSRM API by default, or allow override via environment variable
+      const osrmBaseUrl = process.env.NEXT_PUBLIC_OSRM_BASE_URL || "http://router.project-osrm.org"
+      this.#distanceCalculator = DistanceCalculator.createDefault(osrmBaseUrl)
     }
     return this.#distanceCalculator
   }
@@ -351,6 +357,10 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
    * Requirements 3.3: Highlight selection and enable offboarding stop selection
    * Requirements 3.4: Calculate and display distance from starting location to onboarding stop
    * 
+   * When both stops are selected, this method will:
+   * 1. Calculate distance between stops using OSRM public API
+   * 2. Automatically fetch buses from Supabase
+   * 
    * @param stop The stop to select as onboarding point
    */
   async selectOnboardingStop(stop: StopWithDistance): Promise<void> {
@@ -359,20 +369,113 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
     // Requirement 3.3: Highlight the selection
     // Requirement 3.4: Use the already-calculated distance from the stop discovery
     // The stop.distance field already contains the walking distance in meters
+    // Only set walking distance if we have starting coordinates
+    const walkingDistance = this.#state.fromCoords ? stop.distance : null
+    
     this.#setState({
       selectedOnboardingStop: stop,
-      walkingDistanceToOnboarding: stop.distance, // Already in meters
-      loading: false,
+      walkingDistanceToOnboarding: walkingDistance,
+      loading: true, // Set loading while calculating distance
       error: null
     })
     
-    console.log("[RoutePlannerStore] Onboarding stop selected, walking distance:", stop.distance, "meters")
+    console.log("[RoutePlannerStore] Onboarding stop selected, walking distance:", walkingDistance, "meters")
+
+    // If offboarding stop is already selected, calculate distance between stops using OSRM
+    if (this.#state.selectedOffboardingStop) {
+      try {
+        const journeyDistance = await this.calculateDistanceBetweenStops(
+          stop,
+          this.#state.selectedOffboardingStop
+        )
+
+        this.#setState({
+          journeyDistanceBetweenStops: journeyDistance,
+          loading: false
+        })
+
+        console.log("[RoutePlannerStore] Journey distance calculated:", journeyDistance, "km")
+
+        // Automatically fetch buses from Supabase after distance calculation
+        if (journeyDistance !== null) {
+          await this.searchBusesForRoute()
+        } else {
+          this.#setState({
+            error: "Failed to calculate distance between stops. Please try again."
+          })
+        }
+      } catch (error) {
+        console.error("[RoutePlannerStore] Error in selectOnboardingStop:", error)
+        this.#setState({
+          loading: false,
+          error: `Failed to calculate distance: ${error instanceof Error ? error.message : String(error)}`
+        })
+      }
+    } else {
+      // Offboarding stop not selected yet, just update state
+      this.#setState({
+        loading: false
+      })
+    }
+  }
+
+  /**
+   * Calculate distance between onboarding and offboarding stops using OSRM
+   * @param onboardingStop The onboarding stop
+   * @param offboardingStop The offboarding stop
+   * @returns Distance in kilometers, or null if calculation fails
+   */
+  async calculateDistanceBetweenStops(
+    onboardingStop: StopWithDistance,
+    offboardingStop: StopWithDistance
+  ): Promise<number | null> {
+    try {
+      console.log("[RoutePlannerStore] Calculating distance between stops using OSRM:", {
+        onboarding: onboardingStop.name,
+        offboarding: offboardingStop.name
+      })
+
+      const distanceCalculator = this.#getDistanceCalculator()
+      
+      // Calculate distance using OSRM (with Haversine fallback)
+      const results = await distanceCalculator.calculateDistances(
+        [{ lat: onboardingStop.latitude, lng: onboardingStop.longitude }],
+        [{ lat: offboardingStop.latitude, lng: offboardingStop.longitude }],
+        true // prefer OSRM, fallback to Haversine
+      )
+
+      if (results && results.length > 0 && results[0].length > 0) {
+        const distanceInKm = results[0][0].distance
+        const method = results[0][0].method
+        
+        console.log("[RoutePlannerStore] Distance calculated:", {
+          distance: distanceInKm,
+          method
+        })
+
+        // Update distance calculation method in state
+        this.#setState({
+          distanceCalculationMethod: method === 'OSRM' ? 'OSRM' : 'Haversine'
+        })
+
+        return distanceInKm
+      }
+
+      return null
+    } catch (error) {
+      console.error("[RoutePlannerStore] Error calculating distance between stops:", error)
+      return null
+    }
   }
 
   /**
    * Select an offboarding stop and calculate walking distance to destination location
    * Requirements 3.5: Calculate and display distance from offboarding stop to destination
    * Requirements 3.6: Enable bus route search when both stops are selected
+   * 
+   * When both stops are selected, this method will:
+   * 1. Calculate distance between stops using OSRM public API
+   * 2. Automatically fetch buses from Supabase
    * 
    * @param stop The stop to select as offboarding point
    */
@@ -382,14 +485,54 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
     // Highlight the selection
     // Requirement 3.5: Use the already-calculated distance from the stop discovery
     // The stop.distance field already contains the walking distance in meters
+    // Only set walking distance if we have destination coordinates
+    const walkingDistance = this.#state.toCoords ? stop.distance : null
+    
     this.#setState({
       selectedOffboardingStop: stop,
-      walkingDistanceFromOffboarding: stop.distance, // Already in meters
-      loading: false,
+      walkingDistanceFromOffboarding: walkingDistance,
+      loading: true, // Set loading while calculating distance
       error: null
     })
     
-    console.log("[RoutePlannerStore] Offboarding stop selected, walking distance:", stop.distance, "meters")
+    console.log("[RoutePlannerStore] Offboarding stop selected, walking distance:", walkingDistance, "meters")
+    
+    // If onboarding stop is already selected, calculate distance between stops using OSRM
+    if (this.#state.selectedOnboardingStop) {
+      try {
+        const journeyDistance = await this.calculateDistanceBetweenStops(
+          this.#state.selectedOnboardingStop,
+          stop
+        )
+
+        this.#setState({
+          journeyDistanceBetweenStops: journeyDistance,
+          loading: false
+        })
+
+        console.log("[RoutePlannerStore] Journey distance calculated:", journeyDistance, "km")
+
+        // Automatically fetch buses from Supabase after distance calculation
+        if (journeyDistance !== null) {
+          await this.searchBusesForRoute()
+        } else {
+          this.#setState({
+            error: "Failed to calculate distance between stops. Please try again."
+          })
+        }
+      } catch (error) {
+        console.error("[RoutePlannerStore] Error in selectOffboardingStop:", error)
+        this.#setState({
+          loading: false,
+          error: `Failed to calculate distance: ${error instanceof Error ? error.message : String(error)}`
+        })
+      }
+    } else {
+      // Onboarding stop not selected yet, just update state
+      this.#setState({
+        loading: false
+      })
+    }
     
     // Requirement 3.6: Both stops are now selected, bus route search can be enabled
     // The UI can check if both selectedOnboardingStop and selectedOffboardingStop are non-null
@@ -511,12 +654,12 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
           ...decoratedResult,
           status: route.bus.status,
           routeStops: route.routeStops.map(rs => ({
-            id: rs.stop?.id || '',
-            name: rs.stop?.name || '',
-            latitude: rs.stop?.latitude || 0,
-            longitude: rs.stop?.longitude || 0,
-            accessible: rs.stop?.accessible || false,
-            created_at: rs.stop?.created_at || '',
+            id: (rs as any).stops?.id || rs.stops?.id || '',
+            name: (rs as any).stops?.name || rs.stops?.name || '',
+            latitude: (rs as any).stops?.latitude || rs.stops?.latitude || 0,
+            longitude: (rs as any).stops?.longitude || rs.stops?.longitude || 0,
+            accessible: (rs as any).stops?.accessible || rs.stops?.accessible || false,
+            created_at: (rs as any).stops?.created_at || rs.stops?.created_at || '',
             distance: 0, // Distance from reference point not applicable here
             distanceMethod: 'OSRM' as const
           }))

@@ -11,7 +11,7 @@ export class OSRMStrategy implements DistanceCalculationStrategy {
   private readonly baseUrl: string
   private readonly timeout: number
 
-  constructor(baseUrl: string = "http://localhost:5000", timeout: number = 30000) {
+  constructor(baseUrl: string = "http://router.project-osrm.org", timeout: number = 30000) {
     this.baseUrl = baseUrl
     this.timeout = timeout
   }
