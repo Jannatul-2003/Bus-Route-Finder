@@ -639,6 +639,107 @@ describe('RoutePlannerStore - Observer Pattern Implementation', () => {
     })
   })
 
+  describe('Search Results Management', () => {
+    it('should clear all search results when clearSearchResults is called', () => {
+      // Set up some state to clear
+      routePlannerStore.setFromLocation('Starting Location')
+      routePlannerStore.setToLocation('Destination Location')
+      
+      // Simulate having some search results
+      const state = routePlannerStore.getState()
+      state.startingStops = [{
+        id: '1',
+        name: 'Stop A',
+        latitude: 23.8103,
+        longitude: 90.4125,
+        accessible: true,
+        created_at: '2024-01-01',
+        distance: 250,
+        distanceMethod: 'OSRM' as const
+      }]
+      state.selectedOnboardingStop = state.startingStops[0]
+      state.walkingDistanceToOnboarding = 250
+      state.availableBuses = []
+      state.error = 'Some error'
+
+      // Clear search results
+      routePlannerStore.clearSearchResults()
+
+      // Verify all search-related state is cleared
+      const clearedState = routePlannerStore.getState()
+      expect(clearedState.startingStops).toEqual([])
+      expect(clearedState.destinationStops).toEqual([])
+      expect(clearedState.selectedOnboardingStop).toBeNull()
+      expect(clearedState.selectedOffboardingStop).toBeNull()
+      expect(clearedState.walkingDistanceToOnboarding).toBeNull()
+      expect(clearedState.walkingDistanceFromOffboarding).toBeNull()
+      expect(clearedState.journeyDistanceBetweenStops).toBeNull()
+      expect(clearedState.allBuses).toEqual([])
+      expect(clearedState.availableBuses).toEqual([])
+      expect(clearedState.searchResults).toEqual([])
+      expect(clearedState.plannedRoute).toBeNull()
+      expect(clearedState.mapStops).toEqual([])
+      expect(clearedState.error).toBeNull()
+      
+      // Verify location inputs are preserved
+      expect(clearedState.fromLocation).toBe('Starting Location')
+      expect(clearedState.toLocation).toBe('Destination Location')
+    })
+
+    it('should notify observers when clearSearchResults is called', () => {
+      // Set up some state first
+      routePlannerStore.setFromLocation('Test Location')
+      const initialCallCount = updateSpy.mock.calls.length
+
+      // Clear search results
+      routePlannerStore.clearSearchResults()
+
+      // Verify observer was notified
+      expect(updateSpy).toHaveBeenCalledTimes(initialCallCount + 1)
+      const notifiedState = updateSpy.mock.calls[updateSpy.mock.calls.length - 1][0] as RoutePlannerState
+      expect(notifiedState.startingStops).toEqual([])
+      expect(notifiedState.selectedOnboardingStop).toBeNull()
+    })
+
+    it('should clear coordinates when location inputs change', () => {
+      // Set initial coordinates
+      routePlannerStore.setFromCoords({ lat: 23.8103, lng: 90.4125 })
+      routePlannerStore.setToCoords({ lat: 23.8113, lng: 90.4135 })
+      
+      let state = routePlannerStore.getState()
+      expect(state.fromCoords).not.toBeNull()
+      expect(state.toCoords).not.toBeNull()
+
+      // Change from location (not "Current Location")
+      routePlannerStore.setFromLocation('New Starting Location')
+      
+      state = routePlannerStore.getState()
+      expect(state.fromCoords).toBeNull() // Should be cleared for re-geocoding
+      expect(state.toCoords).not.toBeNull() // Should remain unchanged
+
+      // Change to location
+      routePlannerStore.setToLocation('New Destination')
+      
+      state = routePlannerStore.getState()
+      expect(state.toCoords).toBeNull() // Should be cleared for re-geocoding
+    })
+
+    it('should preserve fromCoords when setting "Current Location"', () => {
+      // Set initial coordinates
+      const coords = { lat: 23.8103, lng: 90.4125 }
+      routePlannerStore.setFromCoords(coords)
+      
+      let state = routePlannerStore.getState()
+      expect(state.fromCoords).toEqual(coords)
+
+      // Set to "Current Location" - should preserve coordinates
+      routePlannerStore.setFromLocation('Current Location')
+      
+      state = routePlannerStore.getState()
+      expect(state.fromCoords).toEqual(coords) // Should be preserved
+    })
+  })
+
   describe('Observer Pattern Validation - Justification Tests', () => {
     it('JUSTIFICATION: Demonstrates Subject-Observer relationship', () => {
       // Subject (Observable) - RoutePlannerStore

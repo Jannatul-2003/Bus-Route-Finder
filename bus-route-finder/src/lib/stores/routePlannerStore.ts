@@ -208,11 +208,19 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
   }
 
   setFromLocation(value: string) {
-    this.#setState({ fromLocation: value })
+    this.#setState({ 
+      fromLocation: value,
+      // Clear coordinates when location text changes so it will be re-geocoded
+      fromCoords: value === "Current Location" ? this.#state.fromCoords : null
+    })
   }
 
   setToLocation(value: string) {
-    this.#setState({ toLocation: value })
+    this.#setState({ 
+      toLocation: value,
+      // Clear coordinates when location text changes so it will be re-geocoded
+      toCoords: null
+    })
   }
 
   setFromCoords(coords: Coordinates) {
@@ -873,6 +881,44 @@ class RoutePlannerStore extends Observable<RoutePlannerState> {
       const filteredAndSorted = this.#applyFiltersAndSort(this.#state.allBuses)
       this.#setState({ availableBuses: filteredAndSorted })
     }
+  }
+
+  /**
+   * Clear search results and reset state for a new search
+   * This should be called when the user starts a new search with different locations
+   */
+  clearSearchResults(): void {
+    this.#setState({
+      // Clear discovered stops
+      startingStops: [],
+      destinationStops: [],
+      
+      // Clear selected stops
+      selectedOnboardingStop: null,
+      selectedOffboardingStop: null,
+      
+      // Clear walking distances
+      walkingDistanceToOnboarding: null,
+      walkingDistanceFromOffboarding: null,
+      
+      // Clear journey distance
+      journeyDistanceBetweenStops: null,
+      
+      // Clear bus results
+      allBuses: [],
+      availableBuses: [],
+      
+      // Clear legacy fields
+      searchResults: [],
+      plannedRoute: null,
+      mapStops: [],
+      
+      // Clear error state
+      error: null
+    })
+    
+    // Clear filter cache
+    this.#filterCache.clear()
   }
 
   async ensureInitialized() {

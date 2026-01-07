@@ -423,6 +423,9 @@ export default function RoutePlannerPage() {
       destinationThreshold: state.destinationThreshold
     })
 
+    // Clear previous search results when starting a new search
+    routePlannerStore.clearSearchResults()
+
     try {
       let fromCoords = state.fromCoords
       let toCoords = state.toCoords
