@@ -235,7 +235,6 @@ const navItems = [
   { href: "/buses", label: "Buses", icon: Bus },
   { href: "/reviews", label: "Bus Reviews", icon: MessageSquare },
   { href: "/community", label: "Community", icon: Users },
-  { href: "/bus-management", label: "Bus Management", icon: Bus },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -244,11 +243,7 @@ export function Navigation() {
   const pathname = usePathname();
   const { user, loading } = useAuth();
 
-  const filteredNavItems = navItems.filter((item) => {
-    // During loading, show all items except contributor-only ones
-    if (item.href === "/bus-management" && (loading || !user?.is_contributor)) return false;
-    return true;
-  });
+  const filteredNavItems = navItems;
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
